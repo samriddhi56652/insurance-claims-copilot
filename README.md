@@ -1,8 +1,8 @@
 # Insurance Claims Copilot
 
-An AI copilot that drafts the **first response** to an auto-insurance claim — for a
-licensed adjuster to review, edit, and approve. It removes the blank-page work,
-not the judgment.
+An AI copilot for auto-insurance claims: it drafts every customer-facing message
+from first notice of loss through to closure — for a licensed adjuster to review,
+edit, and approve. It removes the blank-page work, not the judgment.
 
 Built as a study in **evaluation-driven development**: measure whether the AI's
 output is actually good, then iterate against the numbers. The full before/after
@@ -208,9 +208,10 @@ Headline movement over the iteration series:
 \* the dip is mostly over-strict answer labels; see the log. Test manual:
 [`docs/HOW_TO_TEST.md`](docs/HOW_TO_TEST.md).
 
-These numbers cover the **intake** draft. The follow-up and coverage-recommendation
-drafts added in Phase 2 are not in the harness yet — see the note at the end of
-[`docs/ITERATION_LOG.md`](docs/ITERATION_LOG.md).
+These numbers cover the **intake** draft. The three later drafts (follow-up chase,
+coverage recommendation, closure notice — Phases 2–3) are not in the harness yet;
+they follow the same rules and are verified to work, but aren't measured. See the
+note at the end of [`docs/ITERATION_LOG.md`](docs/ITERATION_LOG.md).
 
 ---
 
