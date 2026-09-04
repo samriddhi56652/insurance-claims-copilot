@@ -446,11 +446,10 @@ the rest -> coverage-recommendation draft (named Collision, cited the verified
 docs, "deductible applies, adjuster confirms the amount" - no invented figure)
 -> approve -> resolved + resolution memory written.
 
-That is one happy-path run, not evaluation. The follow-up and
-coverage-recommendation prompts have **no labelled cases and no judge pass** -
-"are these two drafts reliably good?" is still open. Doing it properly needs
-3-4 labelled "file complete" claims and a judge-rubric addition, ~half a day
-once the Groq quota allows repeated runs. Until then they lean on the human
+That is one happy-path run, not evaluation. The later drafts have **no automated
+judge pass** yet — "are they reliably good?" is still open. §3.7 adds an interim
+hand check; the full automated sweep needs 3-4 labelled "file complete" claims
+and a judge-rubric addition, ~half a day. Until then they lean on the human
 review every draft gets.
 
 ---
@@ -562,3 +561,27 @@ the reader can follow it on the first pass.
 
 **Impact:** documentation only — no code changed. README's gap summary updated to
 match.
+
+### 3.7 — Hand-checked the coverage-recommendation drafts
+The automated test set covers the first draft (the request for documents). The
+later drafts — the follow-up chase, the coverage recommendation, the closing
+notice — aren't wired into it yet.
+
+As an interim check, I read four real coverage-recommendation drafts (two
+collision claims, two comprehensive claims) against the same three questions the
+AI judge asks:
+
+1. Does it only state facts it can actually back up — no made-up deductible
+   amounts or timelines?
+2. Does it name the right coverage for the incident?
+3. Does it stay a *recommendation* and leave the actual decision to the adjuster?
+
+All four passed all three: no invented figures (they say "the adjuster will
+confirm the amount"), the right coverage every time, and always framed as
+preliminary.
+
+This is a hand check on a small sample, not the automated harness with the
+independent AI judge scoring every case. Wiring the three later drafts into that
+harness — a few labelled test claims plus one addition to the judge's rubric — is
+the next piece of work, roughly half a day. Until then, every draft still goes
+through a human adjuster before it reaches a claimant.

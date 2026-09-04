@@ -25,12 +25,13 @@ model runs at all.
 
 **The gap.**
 
-- **Only the first draft is measured.** The copilot now drafts at four points in
-  a claim's life (the initial request for documents, the follow-up chases, the
-  coverage recommendation, the closing notice). Only the first is in the harness.
-  The other three are built to the same rules and verified to work, but "are they
-  *reliably* good?" is an open question. **~half a day** to extend the harness
-  once the AI service quota allows repeated runs.
+- **Only the first draft is measured automatically.** The copilot now drafts at
+  four points in a claim's life (the initial request for documents, the follow-up
+  chases, the coverage recommendation, the closing notice). Only the first is in
+  the automated harness. The other three are built to the same rules; the
+  coverage recommendation has been hand-checked against the judge's rubric on a
+  small sample (see ITERATION_LOG §3.7), but "are they *reliably* good?" needs the
+  automated sweep — **~half a day** once the AI service quota allows repeated runs.
 - **The adjuster's edits are thrown away.** When an adjuster edits a draft before
   approving it, the difference between what the AI wrote and what a human was
   willing to sign is the single most valuable signal for improving the system.
