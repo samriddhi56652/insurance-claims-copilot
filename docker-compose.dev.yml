@@ -1,0 +1,29 @@
+# ── DEVELOPMENT MODE (opt-in) ─────────────────────────────────────────
+# NOT loaded automatically. `docker compose up` uses the clean, photocopy
+# build. To develop with a LIVE view of this folder + auto-reload:
+#
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# (Rename this file back to docker-compose.override.yml to make dev mode
+#  the default again.)
+# ─────────────────────────────────────────────────────────────────────
+
+services:
+  api:
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      # Bind mounts from a Windows host don't deliver inotify events;
+      # force the file watcher to poll instead.
+      - WATCHFILES_FORCE_POLLING=true
+    volumes:
+      - .:/app
+
+  dashboard:
+    command: >
+      streamlit run app.py
+      --server.address 0.0.0.0
+      --server.port 8501
+      --server.runOnSave true
+      --server.fileWatcherType poll
+    volumes:
+      - .:/app

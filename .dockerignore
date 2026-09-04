@@ -1,0 +1,19 @@
+# Keep the build context small and avoid copying a Windows venv into a Linux image.
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+.claude/
+.vscode/
+.pytest_cache/
+.preview/
+data/
+.env
+.env.*
+Dockerfile
+docker-compose.yml
+.dockerignore
+*.md
+!knowledge_base/**
