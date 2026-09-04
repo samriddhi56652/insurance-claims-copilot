@@ -91,11 +91,12 @@ triggers). SLA standards are also now injected as fixed prompt context. See
   `support_kb`). Toggle the key and the ingested KB appears to vanish.
 - **`GET /api/drafts/{ticket_id}` vs `PATCH /api/drafts/{draft_id}`** — same path,
   different ID meaning.
-- **Approving is not idempotent at the API** — the Streamlit UI now hides the
-  approve button once a draft is `accepted`, but a direct `PATCH` re-accepting a
-  `coverage_recommendation` still re-resolves the ticket, re-writes the memory
-  note, and logs a duplicate "sent" correspondence row. Needs an
-  already-accepted guard in `update_draft_route`.
+- **Re-accepting a draft at the API is not idempotent** — the UI hides the
+  approve button once a draft is `accepted`, and `close` is now guarded (a second
+  call returns 409), but a direct `PATCH` re-accepting a draft still re-runs its
+  side effects (re-seeds the checklist / re-logs a "sent" row / re-advances the
+  stage). Needs an already-accepted guard in `update_draft_route`. The memory
+  double-write is gone — memory is only written by `close`, not by acceptance.
 - **Dead config** — `openai_api_key`, `dashboard_api_url`, `enable_local_embeddings`,
   `chroma_mem0_dir` are defined and used nowhere.
 - **`/health` is static** — checks nothing (DB, Chroma, model reachability).
@@ -104,26 +105,32 @@ triggers). SLA standards are also now injected as fixed prompt context. See
 
 ---
 
-## Claim workflow — mostly built (Phase 2), gaps remain
+## Claim workflow — built end to end (Phases 2–3), gaps remain
 
-The two-state "registered → resolved" model is gone (ITERATION_LOG Phase 2). A
-claim now has a real lifecycle, a per-claim documents checklist, a correspondence
-log, and three kinds of draft (intake / follow-up / coverage recommendation).
-What is still missing:
+The two-state "registered → resolved" model is gone. A claim now runs FNOL to
+closure: a real lifecycle (`intake → awaiting_documents → review_ready →
+settlement → closed`), a per-claim documents checklist, a correspondence log,
+four kinds of draft, and an adjuster-recorded coverage decision + settlement
+steps. The customer-history memory is written at closure from the real outcome
+(approved / denied), not from the preliminary recommendation. What is still
+missing:
 
 - **No email integration.** "Send to claimant" is manual — an approved draft is
   logged as sent and the adjuster records the reply by hand. Real outbound email
   (and inbound capture) is a separate build and deliberately out of scope for a
   portfolio project.
-- **The Phase 2 drafts are unevaluated.** `followup_request` and
-  `coverage_recommendation` have no labelled eval cases and no judge pass yet —
-  they lean entirely on the human review every draft gets. ~half a day to close
-  once the Groq quota allows repeated runs.
+- **The Phase 2/3 drafts are unevaluated.** `followup_request`,
+  `coverage_recommendation` and `closure_notice` have no labelled eval cases and
+  no judge pass yet — they lean entirely on the human review every draft gets.
+  ~half a day to close once the Groq quota allows repeated runs.
 - **Checklist seeding keys off the claimant-stated claim type**, not the coverage
   the adjuster actually determines. The adjuster can add/waive items, but a
   mis-stated type produces a slightly wrong starting list.
-- **Stage transitions are not audited.** `lifecycle_stage` is overwritten in
-  place; there is no history of when a claim moved between stages or who moved it.
+- **Stage transitions are not audited.** `lifecycle_stage`, `coverage_decision`
+  and the settlement steps are overwritten in place; there is no history of when
+  a claim moved or who moved it. A regulated system would need an append-only
+  audit trail with the acting adjuster's identity (which also needs auth —
+  Tier 1 item 1).
 
 ---
 

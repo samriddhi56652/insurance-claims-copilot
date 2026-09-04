@@ -26,6 +26,8 @@ class TicketResponse(BaseModel):
     status: str
     lifecycle_stage: str = "intake"
     priority: str
+    coverage_decision: str | None = None
+    outcome: str | None = None
     requirement_counts: dict[str, int] | None = None
     created_at: str
     updated_at: str
@@ -73,6 +75,7 @@ class StructuredDraftContext(BaseModel):
     draft_kind: str | None = None
     checklist_outstanding: list[str] = Field(default_factory=list)
     checklist_verified: list[str] = Field(default_factory=list)
+    outcome: str | None = None
 
 class DraftResponse(BaseModel):
     id: int
@@ -124,12 +127,30 @@ class CorrespondenceCreateRequest(BaseModel):
     body: str = Field(min_length=1)
 
 
+class SettlementState(BaseModel):
+    coverage_decision: str | None = None
+    decision_note: str | None = None
+    repair_authorized: bool = False
+    payment_arranged: bool = False
+    outcome: str | None = None
+    closed_at: str | None = None
+    can_close: bool = False
+
+
+class SettlementUpdateRequest(BaseModel):
+    coverage_decision: Literal["approved", "denied"] | None = None
+    decision_note: str | None = None
+    repair_authorized: bool | None = None
+    payment_arranged: bool | None = None
+
+
 class ClaimWorkflowResponse(BaseModel):
     ticket_id: int
     lifecycle_stage: str
     requirement_counts: dict[str, int]
     requirements: list[RequirementResponse] = Field(default_factory=list)
     correspondence: list[CorrespondenceResponse] = Field(default_factory=list)
+    settlement: SettlementState = Field(default_factory=SettlementState)
 
 class GenerateDraftResponse(BaseModel):
     ticket_id: int

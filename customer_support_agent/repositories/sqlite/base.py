@@ -53,6 +53,27 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
             "ALTER TABLE drafts ADD COLUMN kind TEXT DEFAULT 'intake_request'"
         )
 
+    # Phase 3 - settlement & closure. The claim lifecycle now continues past the
+    # coverage recommendation into settlement (decision + repair + payment) and
+    # a terminal closed state.
+    if not _column_exists(conn, "tickets", "coverage_decision"):
+        for ddl in (
+            "ALTER TABLE tickets ADD COLUMN coverage_decision TEXT",
+            "ALTER TABLE tickets ADD COLUMN decision_note TEXT",
+            "ALTER TABLE tickets ADD COLUMN repair_authorized INTEGER DEFAULT 0",
+            "ALTER TABLE tickets ADD COLUMN payment_arranged INTEGER DEFAULT 0",
+            "ALTER TABLE tickets ADD COLUMN outcome TEXT",
+            "ALTER TABLE tickets ADD COLUMN closed_at TIMESTAMP",
+        ):
+            conn.execute(ddl)
+        # A claim that was 'resolved' under Phase 2 was fully done - move it to
+        # the new terminal state and assume it was an approval.
+        conn.execute(
+            "UPDATE tickets SET lifecycle_stage = 'closed', outcome = 'approved', "
+            "coverage_decision = 'approved', closed_at = CURRENT_TIMESTAMP "
+            "WHERE lifecycle_stage = 'resolved'"
+        )
+
 
 def init_db() -> None:
     with connect() as conn:
@@ -75,6 +96,12 @@ def init_db() -> None:
                 status TEXT DEFAULT 'open',
                 lifecycle_stage TEXT DEFAULT 'intake',
                 priority TEXT DEFAULT 'medium',
+                coverage_decision TEXT,
+                decision_note TEXT,
+                repair_authorized INTEGER DEFAULT 0,
+                payment_arranged INTEGER DEFAULT 0,
+                outcome TEXT,
+                closed_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );

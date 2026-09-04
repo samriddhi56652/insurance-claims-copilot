@@ -169,13 +169,14 @@ durability:
 |---|---|---|
 | SQLite `data/support.db` | customers, tickets, drafts, the requirements checklist, the correspondence log (incl. the `context_used` JSON) | **Yes** — file on disk |
 | Chroma `data/chroma_rag/` | knowledge-base chunk vectors | **Yes** — `PersistentClient` |
-| langmem `InMemoryStore` | per-customer resolution memories | **No** — RAM only, gone on restart |
+| langmem `InMemoryStore` | per-customer claim-closure memories | **No** — RAM only, gone on restart |
 
-So an approved recommendation is *recorded twice*: permanently as a `drafts` row
-with `status = 'accepted'`, and ephemerally as a searchable "memory" that lives
-only for the current server process. Swapping `InMemoryStore` for a persistent
-LangGraph store (or rebuilding the index from accepted drafts on startup) is the
-one change needed to make memory durable.
+So a closed claim is *recorded twice*: permanently on the `tickets` row
+(`outcome`, `coverage_decision`, `closed_at`) and as a `drafts` history, and
+ephemerally as a searchable "memory" that lives only for the current server
+process. Swapping `InMemoryStore` for a persistent LangGraph store (or rebuilding
+the index from closed claims on startup) is the one change needed to make memory
+durable.
 
 ---
 
@@ -251,8 +252,8 @@ flowchart TD
 
 ## 05 · The claim lifecycle
 
-A claim is not a two-state switch. The AI drafts at three points, and an adjuster
-works a documents checklist in between.
+A claim runs FNOL to closure. The AI drafts at four points; an adjuster works a
+documents checklist, then records the coverage decision and the settlement steps.
 
 ```mermaid
 stateDiagram-v2
@@ -261,32 +262,41 @@ stateDiagram-v2
     awaiting_documents --> awaiting_documents: claimant replies, adjuster ticks items
     awaiting_documents --> review_ready: every checklist item verified or waived
     review_ready --> awaiting_documents: an item is un-verified
-    review_ready --> resolved: coverage_recommendation approved (saved to memory)
-    resolved --> [*]
+    review_ready --> settlement: coverage_recommendation draft approved
+    settlement --> closed: adjuster records the decision and settlement steps, then closes
+    closed --> [*]
 ```
 
-`lifecycle_stage` is the fine-grained position; the older `status`
-(`open` / `resolved`) is left alone so the "open claim load" signal still works.
+`lifecycle_stage` is the fine-grained position; `status` flips `open -> closed`
+only at the very end, so a claim still in settlement counts as an open claim for
+the "open claim load" signal.
 
-**The three drafts** (`SupportCopilot.generate_draft(mode=…)`):
+**The four drafts** (`SupportCopilot.generate_draft(mode=…)`):
 
 | Mode | Stage it runs at | Prompt | What it produces |
 |---|---|---|---|
 | `intake_request` | `intake` | full — decision tree, standards, signals; runs the intake gate | the first reply, usually a request for documents |
 | `followup_request` | `awaiting_documents` | trimmed — no decision tree; gets the checklist + correspondence | a short chase for the items still `needed` |
-| `coverage_recommendation` | `review_ready` | full prompt + the verified checklist + correspondence | the preliminary coverage position |
+| `coverage_recommendation` | `review_ready` | own prompt — decision-focused, the verified checklist + correspondence | the preliminary coverage position |
+| `closure_notice` | `settlement` / `closed` | approval: one short model call. denial: a **fixed template, no LLM** | the message to the claimant that the claim is closed |
 
 **The checklist** (`claim_requirements`) is seeded automatically when the intake
 draft is approved, from `services/requirements_catalog.py` — a transcription of
 the knowledge base's "required documents by claim type" doc keyed on the claim
 type. Each row has a status (`needed` → `received` → `verified`, or `waived`) and
 an adjuster note. When every row is `verified`/`waived`, `WorkflowService`
-advances the stage to `review_ready` on the next requirement update.
+advances the stage to `review_ready`.
 
 **The correspondence log** (`claim_correspondence`) is a hand-kept record of what
 was sent to the claimant and what came back — there is no email integration, so
 an approved draft is recorded as `to_claimant` and the adjuster pastes in the
 reply as `from_claimant`.
+
+**Settlement** (stage `settlement`, fields on `tickets`): the adjuster records the
+`coverage_decision` (`approved` / `denied` + a `decision_note`) and, for an
+approval, `repair_authorized` and `payment_arranged`. `WorkflowService.can_close`
+gates the close: decision made, and for an approval both steps done (for a
+denial, a reason note). Closing sets `outcome` and writes the history memory.
 
 ---
 
@@ -298,14 +308,19 @@ When the adjuster clicks **Approve**, the frontend sends
 
 | Draft kind | On approval |
 |---|---|
-| `intake_request` | recorded as sent; the checklist is seeded; the claim moves to `awaiting_documents`. **The claim is not closed.** |
+| `intake_request` | recorded as sent; the checklist is seeded; the claim moves to `awaiting_documents`. |
 | `followup_request` | recorded as sent; the stage is re-checked (usually unchanged). |
-| `coverage_recommendation` | the ticket status is set to `resolved`, the lifecycle stage to `resolved`, and `copilot.save_accepted_resolution(…)` writes a memory into langmem under both the customer and company scopes. |
+| `coverage_recommendation` | recorded as sent; the claim moves to `settlement`. **It does not close the claim or write memory** — that happens at closure. |
+| `closure_notice` | recorded as sent; no stage change. |
 
-The memory write is wrapped in `try/except` and logged, never raised:
-**memory-save failure must never block an approval.** **Request Info** is the
-same call with `status: "discarded"` — it sets the draft aside with no structural
-change.
+**Request Info** is the same call with `status: "discarded"` — it sets the draft
+aside with no structural change.
+
+**Closing a claim** is a separate action — `POST /api/tickets/{id}/close`. It
+sets the outcome, flips `status` to `closed`, and calls
+`copilot.save_claim_closure(…)`, which writes the customer-history memory from
+the real decision. That write is wrapped in `try/except` and logged, never
+raised: **a memory failure must never block a close.**
 
 ---
 
@@ -329,10 +344,10 @@ before/after is in [`ITERATION_LOG.md`](ITERATION_LOG.md); groundedness moved fr
 **1.11 to 1.71 out of 2** across the fixes, and two classes of claim (too-vague,
 injection) are now refused before the model runs.
 
-> **Not yet covered:** the Phase 2 `followup_request` and
-> `coverage_recommendation` drafts have no labelled cases or judge pass yet. They
-> follow the same rules as the intake prompt and the plumbing is verified, but
-> "are these two drafts good?" is an open question — see the note at the end of
+> **Not yet covered:** the Phase 2/3 `followup_request`,
+> `coverage_recommendation` and `closure_notice` drafts have no labelled cases or
+> judge pass yet. The plumbing is verified end to end, but "are these drafts
+> reliably good?" is an open question — see the note at the end of
 > [`ITERATION_LOG.md`](ITERATION_LOG.md) Phase 2.
 
 Run it: `python evals/run_eval.py`. Manual test walkthrough:
@@ -355,6 +370,9 @@ Run it: `python evals/run_eval.py`. Manual test walkthrough:
 | `POST /api/tickets/{id}/correspondence` | Log a message to / from the claimant. |
 | `POST /api/tickets/{id}/followup-draft` | Generate a follow-up chase draft. `409` unless the claim is at `awaiting_documents`. |
 | `POST /api/tickets/{id}/coverage-recommendation` | Generate the coverage-position draft. `409` unless the claim is at `review_ready`. |
+| `PATCH /api/tickets/{id}/settlement` | Record the coverage decision / note / settlement steps. `409` unless the claim is at `settlement`. |
+| `POST /api/tickets/{id}/close` | Close the claim — sets the outcome, writes the history memory. `409` unless the decision and steps are complete. |
+| `POST /api/tickets/{id}/closure-notice` | Generate the closure notice (approval: LLM; denial: fixed template). |
 | `GET /api/drafts/{ticket_id}` | Latest draft for a ticket (frontend polls this). |
 | `PATCH /api/drafts/{draft_id}` | Edit / accept / discard. What "accept" does depends on the draft `kind` — see §06. |
 | `POST /api/knowledge/ingest` | (Re-)index `knowledge_base/*.md,*.txt` into Chroma. |

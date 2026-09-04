@@ -99,6 +99,8 @@ class SupportCopilot:
           - "followup_request": chase only the checklist items still outstanding.
           - "coverage_recommendation": the preliminary coverage position, written
             once the checklist is complete.
+          - "closure_notice": the message to the claimant once the claim is
+            closed (approved only - a denial uses a fixed template, no LLM).
         """
         if mode == "followup_request":
             return self._generate_followup_request(
@@ -108,6 +110,8 @@ class SupportCopilot:
             return self._generate_coverage_recommendation(
                 ticket, customer, requirements or [], correspondence or []
             )
+        if mode == "closure_notice":
+            return self._generate_closure_notice(ticket, customer)
         return self._generate_intake_request(ticket, customer)
 
     def _generate_intake_request(
@@ -210,6 +214,107 @@ class SupportCopilot:
                 "Model returned empty content; deterministic template used."
             )
         return {"draft": draft_text, "context_used": context_used}
+
+    def _generate_closure_notice(
+        self, ticket: dict[str, Any], customer: dict[str, Any]
+    ) -> dict[str, Any]:
+        """The message the claimant gets once the claim is closed.
+
+        A denial is legally sensitive, so it uses a fixed template - no LLM. An
+        approval gets one short model call.
+        """
+        decision = (ticket.get("coverage_decision") or "").lower()
+        name = customer.get("name") or "there"
+
+        def _package(text: str, used_fallback: bool) -> dict[str, Any]:
+            ctx: dict[str, Any] = {
+                "version": 2,
+                "ticket": {"id": ticket.get("id"), "subject": ticket.get("subject")},
+                "customer": {
+                    "email": customer.get("email"),
+                    "company": customer.get("company"),
+                },
+                "signals": {
+                    "memory_hit_count": 0,
+                    "knowledge_hit_count": 0,
+                    "tool_call_count": 0,
+                    "tool_error_count": 0,
+                    "knowledge_sources": [],
+                },
+                "highlights": {"memory": [], "knowledge": [], "tools": []},
+                "memory_hits": [],
+                "knowledge_hits": [],
+                "tool_calls": [],
+                "errors": [],
+                "agent_runtime": "direct",
+                "draft_kind": "closure_notice",
+                "outcome": decision or None,
+            }
+            if used_fallback:
+                ctx["errors"].append(
+                    "Model returned empty content; deterministic template used."
+                )
+            return {"draft": text, "context_used": ctx}
+
+        if decision == "denied":
+            note = (ticket.get("decision_note") or "").strip()
+            return _package(self._denial_notice(name, ticket, note), used_fallback=False)
+
+        system_prompt = (
+            "You are drafting a short, courteous message to an insurance claimant "
+            "whose auto claim has been APPROVED and closed by a licensed adjuster. "
+            "Rules: confirm the approval and the coverage type; say the deductible "
+            "was applied and the adjuster confirmed the amount; say the repair has "
+            "been authorised and payment arranged with the repair shop; keep it "
+            "under 120 words; no confidence levels or invented figures; the "
+            "adjuster's decision is final for this claim, so do not hedge it as "
+            "'preliminary'."
+        )
+        user_prompt = (
+            f"Claimant: {name}\n"
+            f"Claim: {ticket.get('subject')}\n"
+            f"Claim type: {ticket.get('claim_type') or 'auto'}\n"
+            f"Adjuster note: {(ticket.get('decision_note') or '(none)').strip()}\n\n"
+            "Draft the approval-and-closure message."
+        )
+        used_fallback = False
+        response = self._llm.invoke(
+            [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+        )
+        text = self._extract_content(response).strip()
+        if not text:
+            text = self._approval_notice(name, ticket)
+            used_fallback = True
+        return _package(text, used_fallback)
+
+    @staticmethod
+    def _approval_notice(name: str, ticket: dict[str, Any]) -> str:
+        return (
+            f"Hi {name},\n\n"
+            f"Good news - your claim \"{ticket.get('subject', '')}\" has been "
+            "approved and closed by a licensed adjuster. The applicable coverage "
+            "was confirmed and your policy deductible was applied (the adjuster "
+            "confirmed the exact amount). The repair has been authorised and "
+            "payment arranged with the repair shop.\n\n"
+            "If you have any questions about the repair or the payment, contact "
+            "your adjuster.\n\n"
+            "Best,\nClaims Team"
+        )
+
+    @staticmethod
+    def _denial_notice(name: str, ticket: dict[str, Any], note: str) -> str:
+        reason = note or "the claim did not meet the policy coverage conditions"
+        return (
+            f"Hi {name},\n\n"
+            f"After review, your claim \"{ticket.get('subject', '')}\" has been "
+            "closed as not covered by a licensed adjuster.\n\n"
+            f"Reason: {reason}\n\n"
+            "If you believe this decision is in error or you have additional "
+            "information, you may request a review by replying to this message "
+            "or contacting your adjuster. Please include any supporting "
+            "documentation.\n\n"
+            "Best,\nClaims Team"
+        )
 
     def _gather_context(
         self, ticket: dict[str, Any], customer: dict[str, Any]
@@ -331,32 +436,93 @@ class SupportCopilot:
             },
         }
 
-    def save_accepted_resolution(
+    def save_claim_closure(
         self,
         customer_email: str,
         customer_company: str | None,
-        ticket_subject: str,
-        ticket_description: str,
-        draft_content: str,
+        ticket: dict[str, Any],
+        coverage_rec_text: str,
         context_used: dict[str, Any] | None = None,
     ) -> None:
+        """Write the customer-history memory when a claim CLOSES.
+
+        Called from the close-claim endpoint, not on coverage-recommendation
+        approval - so the memory records the real adjuster outcome (approved /
+        denied) rather than the preliminary recommendation.
+        """
         entity_links = self._extract_entity_links(
-            ticket_subject=ticket_subject,
-            ticket_description=ticket_description,
-            draft_content=draft_content,
+            ticket=ticket,
+            coverage_rec_text=coverage_rec_text,
             context_used=context_used or {},
+        )
+        memory_text = self._build_closure_memory_text(
+            ticket, coverage_rec_text, entity_links
         )
         for scope_user_id in self._memory_scope_ids(
             customer_email=customer_email,
             customer_company=customer_company,
         ):
-            self.memory.add_resolution(
-                user_id=scope_user_id,
-                ticket_subject=ticket_subject,
-                ticket_description=ticket_description,
-                accepted_draft=draft_content,
-                entity_links=entity_links,
+            self.memory.add_closure(user_id=scope_user_id, text=memory_text)
+
+    @staticmethod
+    def _first_line_after(pattern: str, text: str) -> str:
+        m = re.search(pattern, text or "", re.I)
+        return m.group(1).strip().splitlines()[0].strip() if m else ""
+
+    def _build_closure_memory_text(
+        self,
+        ticket: dict[str, Any],
+        coverage_rec_text: str,
+        entity_links: list[str],
+    ) -> str:
+        decision = (ticket.get("coverage_decision") or "").lower()
+        note = (ticket.get("decision_note") or "").strip()
+        desc = ticket.get("description") or ""
+
+        facts: list[str] = []
+        if ticket.get("claim_type"):
+            facts.append(f"Type: {ticket['claim_type']}")
+        incident = self._first_line_after(r"incident date:\s*(.+)", desc)
+        if incident:
+            facts.append(f"Incident: {incident}")
+        location = self._first_line_after(r"loss location:\s*(.+)", desc)
+        if location:
+            facts.append(f"Location: {location}")
+
+        if decision == "denied":
+            decision_line = (
+                f"Adjuster decision: DENIED. Reason: {note or 'not recorded'}."
             )
+        elif decision == "approved":
+            steps = []
+            if ticket.get("repair_authorized"):
+                steps.append("repair authorised")
+            if ticket.get("payment_arranged"):
+                steps.append("payment arranged")
+            decision_line = "Adjuster decision: APPROVED"
+            if steps:
+                decision_line += " (" + ", ".join(steps) + ")"
+            decision_line += "."
+            if note:
+                decision_line += f" Note: {note}"
+        else:
+            decision_line = "Adjuster decision: recorded."
+
+        parts = [
+            "PRIOR CLOSED CLAIM for this customer - history: a past claim that "
+            "has been decided and closed by a licensed adjuster. This is a "
+            "record, not an open task.",
+            f"Subject: {ticket.get('subject', '')}",
+        ]
+        if facts:
+            parts.append(" | ".join(facts))
+        parts.append(decision_line)
+        if coverage_rec_text.strip():
+            parts.append("Recommendation that informed the decision:")
+            parts.append(coverage_rec_text.strip())
+        if entity_links:
+            parts.append("Tags: " + ", ".join(entity_links))
+        return "\n".join(parts)
 
     def list_customer_memories(
         self,
@@ -845,40 +1011,43 @@ class SupportCopilot:
             return clean
         return f"{clean[: limit - 3]}..."
 
+    _COVERAGE_TERMS = (
+        ("Collision", r"collision"),
+        ("Comprehensive", r"comprehensive"),
+        ("Liability", r"liability"),
+        ("Property Damage", r"property[\s-]damage"),
+        ("Bodily Injury", r"bodily[\s-]injury"),
+    )
+
     def _extract_entity_links(
         self,
-        ticket_subject: str,
-        ticket_description: str,
-        draft_content: str,
+        ticket: dict[str, Any],
+        coverage_rec_text: str,
         context_used: dict[str, Any],
     ) -> list[str]:
-        merged_text = f"{ticket_subject}\n{ticket_description}\n{draft_content}"
-        merged_lower = merged_text.lower()
+        """Compact tags for the customer-history memory. Claim-relevant only -
+        the claim type, the coverage type the recommendation affirmed, and the
+        deterministic signal-tool outputs."""
         links: list[str] = []
 
-        endpoints = re.findall(r"/[a-zA-Z0-9][a-zA-Z0-9/_-]{2,}", merged_text)
-        for endpoint in self._unique_ordered(endpoints)[:3]:
-            links.append(f"endpoint:{endpoint}")
+        claim_type = (ticket.get("claim_type") or "").strip()
+        if claim_type:
+            links.append(f"claim_type:{claim_type}")
 
-        status_codes = re.findall(r"\b([45]\d\d)\b", merged_text)
-        for code in self._unique_ordered(status_codes)[:4]:
-            links.append(f"http_status:{code}")
-
-        regions = [
-            ("EU", [" eu ", "europe", "emea"]),
-            ("US", [" us ", "united states", "na "]),
-            ("APAC", [" apac ", "asia pacific"]),
-            ("India", [" india ", " in "]),
-        ]
-        padded = f" {merged_lower} "
-        for region, markers in regions:
-            if any(marker in padded for marker in markers):
-                links.append(f"region:{region}")
-
-        integrations = ["shopify", "stripe", "salesforce", "slack", "quickbooks", "hubspot", "zendesk"]
-        for integration in integrations:
-            if integration in merged_lower:
-                links.append(f"integration:{integration}")
+        text = coverage_rec_text or ""
+        for label, term in self._COVERAGE_TERMS:
+            for m in re.finditer(rf"\b{term}\b", text, re.I):
+                before = text[max(0, m.start() - 6) : m.start()].lower()
+                after = text[m.end() : m.end() + 55].lower()
+                if before.rstrip().endswith(("no", "not", "n't")):
+                    continue
+                if re.search(
+                    r"\b(not apply|not applicable|not needed|does not|is not|are not|n/a)\b",
+                    after,
+                ):
+                    continue
+                links.append(f"coverage:{label}")
+                break
 
         for tool_call in context_used.get("tool_calls", []):
             output = tool_call.get("output")

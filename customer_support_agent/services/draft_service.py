@@ -48,6 +48,8 @@ class DraftService:
             "status": ticket["status"],
             "lifecycle_stage": ticket.get("lifecycle_stage") or "intake",
             "priority": ticket["priority"],
+            "coverage_decision": ticket.get("coverage_decision"),
+            "outcome": ticket.get("outcome"),
             "requirement_counts": requirement_counts,
             "created_at": ticket["created_at"],
             "updated_at": ticket["updated_at"],

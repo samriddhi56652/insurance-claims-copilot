@@ -155,13 +155,33 @@ def add_correspondence(
 
 
 def generate_lifecycle_draft(ticket_id: int, kind: str) -> dict[str, Any]:
-    """kind: 'followup-draft' or 'coverage-recommendation'."""
+    """kind: 'followup-draft', 'coverage-recommendation' or 'closure-notice'."""
     response = requests.post(
         f"{API_BASE_URL}/api/tickets/{ticket_id}/{kind}", timeout=60
     )
     if response.status_code >= 400:
         raise RuntimeError(_extract_api_error(response))
     return response.json()["draft"]
+
+
+def update_settlement(ticket_id: int, fields: dict[str, Any]) -> dict[str, Any]:
+    response = requests.patch(
+        f"{API_BASE_URL}/api/tickets/{ticket_id}/settlement", json=fields, timeout=20
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(_extract_api_error(response))
+    fetch_tickets.clear()
+    return response.json()
+
+
+def close_claim(ticket_id: int) -> dict[str, Any]:
+    response = requests.post(
+        f"{API_BASE_URL}/api/tickets/{ticket_id}/close", timeout=30
+    )
+    if response.status_code >= 400:
+        raise RuntimeError(_extract_api_error(response))
+    fetch_tickets.clear()
+    return response.json()
 
 
 def _compose_claim_description(
@@ -269,20 +289,26 @@ def render_context(context: dict[str, Any] | None) -> None:
 STAGE_META: dict[str, dict[str, str]] = {
     "intake": {
         "label": "Intake - drafting the first response",
-        "icon": "1/4",
+        "icon": "1/5",
     },
     "awaiting_documents": {
         "label": "Awaiting documents from the claimant",
-        "icon": "2/4",
+        "icon": "2/5",
     },
     "review_ready": {
         "label": "Ready for coverage review",
-        "icon": "3/4",
+        "icon": "3/5",
     },
-    "resolved": {
-        "label": "Resolved",
-        "icon": "4/4",
+    "settlement": {
+        "label": "Settlement - decision, repair, payment",
+        "icon": "4/5",
     },
+    "closed": {
+        "label": "Closed",
+        "icon": "5/5",
+    },
+    # legacy value from before Phase 3; migrated rows shouldn't have it
+    "resolved": {"label": "Resolved", "icon": "-"},
 }
 
 REQ_STATUSES = ["needed", "received", "verified", "waived"]
@@ -290,6 +316,7 @@ DRAFT_KIND_LABEL = {
     "intake_request": "Intake response",
     "followup_request": "Follow-up request",
     "coverage_recommendation": "Coverage recommendation",
+    "closure_notice": "Closure notice",
 }
 
 
@@ -434,6 +461,79 @@ def render_correspondence(ticket_id: int, workflow: dict[str, Any]) -> None:
                     st.rerun()
                 except Exception as exc:
                     st.error(f"Log failed: {exc}")
+
+
+def render_settlement(ticket_id: int, settlement: dict[str, Any]) -> None:
+    """Stage 4/5 - the adjuster records the coverage decision and the two
+    settlement steps, then closes the claim."""
+    decision = (settlement.get("coverage_decision") or "").lower()
+
+    st.markdown("**Coverage decision** (the adjuster's call)")
+    choice = st.radio(
+        "Decision",
+        ["(not decided)", "approved", "denied"],
+        index={"approved": 1, "denied": 2}.get(decision, 0),
+        key=f"settle_decision_{ticket_id}",
+        horizontal=True,
+    )
+    note = st.text_area(
+        "Reason / note (required for a denial)",
+        value=settlement.get("decision_note") or "",
+        key=f"settle_note_{ticket_id}",
+    )
+    if st.button("Save decision", key=f"settle_save_{ticket_id}"):
+        if choice == "(not decided)":
+            st.warning("Pick approved or denied.")
+        elif choice == "denied" and not note.strip():
+            st.warning("A denial needs a reason note.")
+        else:
+            try:
+                update_settlement(
+                    ticket_id,
+                    {"coverage_decision": choice, "decision_note": note.strip()},
+                )
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Save failed: {exc}")
+
+    if decision == "approved":
+        st.markdown("**Settlement steps**")
+        repair = st.checkbox(
+            "Repair / replacement authorized",
+            value=settlement.get("repair_authorized", False),
+            key=f"settle_repair_{ticket_id}",
+        )
+        payment = st.checkbox(
+            "Payment arranged with the repair shop / claimant",
+            value=settlement.get("payment_arranged", False),
+            key=f"settle_pay_{ticket_id}",
+        )
+        if st.button("Save steps", key=f"settle_steps_{ticket_id}"):
+            try:
+                update_settlement(
+                    ticket_id,
+                    {"repair_authorized": repair, "payment_arranged": payment},
+                )
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Save failed: {exc}")
+
+    st.divider()
+    if settlement.get("can_close"):
+        st.markdown("**Close the claim**")
+        if st.button("Close Claim", key=f"settle_close_{ticket_id}", type="primary"):
+            try:
+                result = close_claim(ticket_id)
+                st.session_state.pop(f"draft_{ticket_id}", None)
+                st.success(f"Claim closed - outcome: {result.get('outcome')}")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Close failed: {exc}")
+    else:
+        st.caption(
+            "To close: record the decision; for an approval, tick both settlement "
+            "steps (for a denial, add the reason note)."
+        )
 
 
 with st.sidebar:
@@ -645,24 +745,63 @@ else:
             render_draft_block(
                 selected_ticket,
                 draft_data,
-                approve_label="Approve — Resolve Claim",
+                approve_label="Approve & Move to Settlement",
                 request_label="Request Info (reopen documents)",
             )
             st.caption(
-                "Approving this resolves the claim and files the outcome in "
-                "customer memory."
+                "Approving sends the recommendation and moves the claim to "
+                "settlement - it does not close the claim yet."
             )
 
-    # ---- Stage: resolved ------------------------------------------------
-    else:
-        st.success("This claim is resolved.")
+    # ---- Stage: settlement --------------------------------------------
+    elif stage == "settlement":
         if workflow_data:
+            with st.expander("Verified checklist & correspondence", expanded=False):
+                render_checklist(ticket_id, workflow_data)
+                st.divider()
+                render_correspondence(ticket_id, workflow_data)
+            cov = None
+            try:
+                cov = fetch_draft(ticket_id)
+            except Exception:
+                cov = None
+            if cov and cov.get("kind") == "coverage_recommendation":
+                with st.expander("Coverage recommendation", expanded=True):
+                    st.write(cov["content"])
+            render_settlement(ticket_id, workflow_data.get("settlement") or {})
+
+        st.divider()
+        st.markdown("**Closure notice to the claimant** (optional, once decided)")
+        if st.button("Draft Closure Notice", use_container_width=True):
+            try:
+                st.session_state[f"draft_{ticket_id}"] = generate_lifecycle_draft(
+                    ticket_id, "closure-notice"
+                )
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Closure notice failed: {exc}")
+        if draft_data and draft_data.get("kind") == "closure_notice":
+            render_draft_block(
+                selected_ticket,
+                draft_data,
+                approve_label="Approve & Send to Claimant",
+                request_label="Discard",
+            )
+
+    # ---- Stage: closed ------------------------------------------------
+    else:
+        outcome = (selected_ticket.get("outcome") or "closed").upper()
+        st.success(f"Claim closed - outcome: {outcome}")
+        if workflow_data:
+            s = workflow_data.get("settlement") or {}
+            if s.get("decision_note"):
+                st.caption(f"Adjuster note: {s['decision_note']}")
             with st.expander("Checklist & correspondence", expanded=False):
                 render_checklist(ticket_id, workflow_data)
                 st.divider()
                 render_correspondence(ticket_id, workflow_data)
         if draft_data:
-            st.markdown("**Final coverage recommendation**")
+            st.markdown(f"**{DRAFT_KIND_LABEL.get(draft_data.get('kind'), 'Latest draft')}**")
             st.write(draft_data["content"])
             with st.expander("Context used for this draft"):
                 render_context(draft_data.get("context_used"))

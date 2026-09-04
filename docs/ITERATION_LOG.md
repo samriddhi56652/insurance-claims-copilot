@@ -451,3 +451,92 @@ coverage-recommendation prompts have **no labelled cases and no judge pass** -
 3-4 labelled "file complete" claims and a judge-rubric addition, ~half a day
 once the Groq quota allows repeated runs. Until then they lean on the human
 review every draft gets.
+
+---
+
+# Phase 3 — Settlement, closure, and outcome-based memory
+
+Phase 2 ended a claim at "resolved" - meaning the coverage-recommendation draft
+had been approved. But that draft is still only a *recommendation*: it ends
+"your adjuster will confirm all details and proceed with the settlement". So a
+claim marked resolved was, in truth, still mid-settlement, and the customer-
+history memory written at that point read like an open task.
+
+Phase 3 continues the lifecycle to an actual close.
+
+### 3.1 — The lifecycle reaches an end
+**What:** two new stages after the coverage recommendation.
+
+```
+intake -> awaiting_documents -> review_ready -> settlement -> closed
+```
+
+- **`settlement`** (was "resolved"): the adjuster records the **coverage
+  decision** (approve / deny + a reason note) and, for an approval, ticks two
+  steps - *repair/replacement authorised* and *payment arranged*.
+- **`closed`**: terminal. `outcome` is `approved`, `denied`, or `withdrawn`;
+  `status` flips `open -> closed` only here, so a claim in settlement still
+  counts as an open claim.
+
+New claim fields: `coverage_decision`, `decision_note`, `repair_authorized`,
+`payment_arranged`, `outcome`, `closed_at`. Existing databases migrate in place;
+a claim that was "resolved" under Phase 2 becomes `closed` / `outcome=approved`.
+
+**Why:** "resolved" was a half-truth. A claim isn't done until the money moves
+(or the denial is issued).
+
+### 3.2 — Memory is written at closure, from the real outcome
+**What:** the customer-history memory used to be written when the
+coverage-recommendation draft was approved, and it stored that draft verbatim.
+Now it's written by the **close-claim** action, and it records the adjuster's
+actual decision:
+
+> **PRIOR CLOSED CLAIM** for this customer - history: a past claim that has been
+> decided and closed by a licensed adjuster. This is a record, not an open task.
+> Subject: … · Type: Glass Damage · Incident: 2026-09-02 · Location: Portland, OR
+> **Adjuster decision: APPROVED** (repair authorised, payment arranged).
+> Recommendation that informed the decision: …
+> Tags: `claim_type:Glass Damage, coverage:Comprehensive`
+
+A denial records the reason instead. The recommendation text is kept but clearly
+subordinate - it's context for the decision, not the decision.
+
+**Why:** the memory feeds future claims' prompts. It should say what *happened*,
+not what was *proposed*.
+
+### 3.3 — The entity tags stopped being nonsense
+**What:** the tag extractor (`_extract_entity_links`) was leftover from the
+generic "customer-support agent" template - it scraped for API endpoints, HTTP
+status codes, geographic regions, and SaaS integration names. On a Portland
+claim it emitted `region:India` (the word "in" in "in Portland" matched an
+India marker).
+
+Rewrote it to emit claim-relevant tags only: `claim_type:<type>` (from the real
+field), `coverage:<type>` (only the coverage the recommendation *affirmed* -
+negation-aware, so "Bodily Injury not applicable" is not tagged), plus the
+deterministic signal-tool outputs (`priority:urgent`, `escalation:*`,
+`open_load:*`).
+
+### 3.4 — A closure notice to the claimant
+**What:** a fourth draft kind, `closure_notice` - the message the claimant gets
+once the claim closes.
+
+- **Approved:** one model call - confirms the approval, the coverage type, that
+  the deductible was applied and the adjuster confirmed the amount, and that
+  repair and payment are arranged. Under 120 words, stated as final (not
+  "preliminary").
+- **Denied:** a **fixed template**, no LLM - a denial is legally sensitive, so
+  the wording is deterministic, states the recorded reason, and tells the
+  claimant how to request a review.
+
+### 3.5 — The workbench gained two stages
+Stage badges are now "N/5". The **settlement** stage shows the coverage-decision
+control (approve / deny + note), the two settlement-step checkboxes for an
+approval, a **Close Claim** button that only activates once the decision and
+steps are complete, and an optional **Draft Closure Notice**. The **closed**
+stage is read-only: the outcome, the adjuster note, and the final notice.
+
+**Impact:** verified end to end (without the model): register -> … -> coverage
+rec approved -> `settlement` -> record decision + steps -> `close` -> `closed`,
+`outcome=approved`, and a clean outcome-based memory. The close endpoint is
+idempotent (a second call returns 409).

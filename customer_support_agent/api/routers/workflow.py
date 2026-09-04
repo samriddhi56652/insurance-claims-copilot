@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from customer_support_agent.api.dependencies import (
     get_claim_correspondence_repository,
     get_claim_requirements_repository,
+    get_copilot,
     get_copilot_or_503,
     get_customers_repository,
     get_draft_service,
@@ -35,12 +36,16 @@ from customer_support_agent.schemas.api import (
     RequirementCreateRequest,
     RequirementResponse,
     RequirementUpdateRequest,
+    SettlementUpdateRequest,
+    TicketResponse,
 )
 from customer_support_agent.services.copilot_service import SupportCopilot
 from customer_support_agent.services.draft_service import DraftService
 from customer_support_agent.services.workflow_service import (
     STAGE_AWAITING,
+    STAGE_CLOSED,
     STAGE_REVIEW_READY,
+    STAGE_SETTLEMENT,
     WorkflowService,
 )
 
@@ -243,6 +248,142 @@ def coverage_recommendation_route(
         ticket_id=ticket_id,
         mode="coverage_recommendation",
         required_stage=STAGE_REVIEW_READY,
+        tickets_repo=tickets_repo,
+        customers_repo=customers_repo,
+        drafts_repo=drafts_repo,
+        requirements_repo=requirements_repo,
+        correspondence_repo=correspondence_repo,
+        draft_service=draft_service,
+        copilot=copilot,
+    )
+
+
+# --- Settlement & closure ----------------------------------------------------
+
+
+@router.patch(
+    "/api/tickets/{ticket_id}/settlement", response_model=TicketResponse
+)
+def update_settlement_route(
+    ticket_id: int,
+    payload: SettlementUpdateRequest,
+    tickets_repo: TicketsRepository = Depends(get_tickets_repository),
+    requirements_repo: ClaimRequirementsRepository = Depends(
+        get_claim_requirements_repository
+    ),
+    draft_service: DraftService = Depends(get_draft_service),
+) -> dict[str, Any]:
+    ticket = _require_ticket(ticket_id, tickets_repo)
+    if (ticket.get("lifecycle_stage") or "") != STAGE_SETTLEMENT:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Claim is at stage '{ticket.get('lifecycle_stage')}'. Settlement "
+                f"fields can only be set at stage '{STAGE_SETTLEMENT}'."
+            ),
+        )
+
+    fields = payload.model_dump(exclude_none=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="No settlement fields provided.")
+    updated = tickets_repo.update_settlement(ticket_id, **fields)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to update settlement")
+    return draft_service.serialize_ticket(
+        updated, requirements_repo.counts_for_ticket(ticket_id)
+    )
+
+
+@router.post("/api/tickets/{ticket_id}/close", response_model=TicketResponse)
+def close_claim_route(
+    ticket_id: int,
+    tickets_repo: TicketsRepository = Depends(get_tickets_repository),
+    customers_repo: CustomersRepository = Depends(get_customers_repository),
+    drafts_repo: DraftsRepository = Depends(get_drafts_repository),
+    requirements_repo: ClaimRequirementsRepository = Depends(
+        get_claim_requirements_repository
+    ),
+    draft_service: DraftService = Depends(get_draft_service),
+    workflow: WorkflowService = Depends(get_workflow_service),
+) -> dict[str, Any]:
+    ticket = _require_ticket(ticket_id, tickets_repo)
+    stage = ticket.get("lifecycle_stage") or ""
+    if stage == STAGE_CLOSED:
+        raise HTTPException(status_code=409, detail="Claim is already closed.")
+    if stage != STAGE_SETTLEMENT:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Claim is at stage '{stage}'; it must be at '{STAGE_SETTLEMENT}' to close.",
+        )
+    if not workflow.can_close(ticket):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Cannot close yet: record the coverage decision, and for an "
+                "approval mark both the repair authorised and payment arranged "
+                "(for a denial, add a reason note)."
+            ),
+        )
+
+    closed = workflow.close_claim(ticket_id)
+    if not closed:
+        raise HTTPException(status_code=500, detail="Failed to close claim")
+
+    # Write the customer-history memory from the real outcome. Best-effort -
+    # closing the claim must succeed even if the memory backend is unavailable.
+    try:
+        customer = customers_repo.get_by_id(closed["customer_id"])
+        cov = drafts_repo.latest_of_kind(ticket_id, "coverage_recommendation")
+        draft_service_ctx = draft_service.parse_context_used(
+            (cov or {}).get("context_used")
+        )
+        get_copilot().save_claim_closure(
+            customer_email=customer["email"],
+            customer_company=customer.get("company"),
+            ticket=closed,
+            coverage_rec_text=(cov or {}).get("content", ""),
+            context_used=draft_service_ctx,
+        )
+    except Exception:
+        logger.exception("Closure memory save failed for ticket_id=%s", ticket_id)
+
+    return draft_service.serialize_ticket(
+        closed, requirements_repo.counts_for_ticket(ticket_id)
+    )
+
+
+@router.post(
+    "/api/tickets/{ticket_id}/closure-notice", response_model=GenerateDraftResponse
+)
+def closure_notice_route(
+    ticket_id: int,
+    tickets_repo: TicketsRepository = Depends(get_tickets_repository),
+    customers_repo: CustomersRepository = Depends(get_customers_repository),
+    drafts_repo: DraftsRepository = Depends(get_drafts_repository),
+    requirements_repo: ClaimRequirementsRepository = Depends(
+        get_claim_requirements_repository
+    ),
+    correspondence_repo: ClaimCorrespondenceRepository = Depends(
+        get_claim_correspondence_repository
+    ),
+    draft_service: DraftService = Depends(get_draft_service),
+    copilot: SupportCopilot = Depends(get_copilot_or_503),
+) -> dict[str, Any]:
+    ticket = _require_ticket(ticket_id, tickets_repo)
+    stage = ticket.get("lifecycle_stage") or ""
+    if stage not in (STAGE_SETTLEMENT, STAGE_CLOSED):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Claim is at stage '{stage}'; a closure notice needs settlement or closed.",
+        )
+    if not (ticket.get("coverage_decision") or "").strip():
+        raise HTTPException(
+            status_code=409, detail="Record the coverage decision first."
+        )
+    return _generate_lifecycle_draft(
+        ticket_id=ticket_id,
+        mode="closure_notice",
+        required_stage=stage,
         tickets_repo=tickets_repo,
         customers_repo=customers_repo,
         drafts_repo=drafts_repo,

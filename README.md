@@ -42,8 +42,8 @@ denial, is a regulated call a licensed human must own.
 
 ## The solution
 
-A copilot that produces the **drafts** and carries the claim through the
-document-collection loop — never making the decision. It:
+A copilot that produces the **drafts** and carries the claim from FNOL to
+closure — never making the decision. It:
 
 - **Classifies the likely coverage** from an explicit rule set drawn from the
   policy documents.
@@ -53,17 +53,22 @@ document-collection loop — never making the decision. It:
 - **Drafts the follow-up chases** as the claimant responds — covering only what's
   still outstanding — and, once the adjuster has verified every item, **drafts
   the preliminary coverage recommendation**.
+- **Tracks settlement to the end** — the adjuster records the coverage decision
+  (approve / deny) and ticks off *repair authorised* and *payment arranged*; the
+  claim only closes when the money has actually moved. A **closure notice** to
+  the claimant is drafted for an approval; a denial uses a fixed, reviewable
+  template.
 - **Quotes the real service-level timeline** — never an invented number.
 - **Flags urgent and suspicious claims** — injury, hit-and-run, large loss,
   commercial vehicle, or fraud indicators (recent policy, delayed report) — in
   neutral language, on every claim.
-- **Surfaces the customer's history automatically.** Every resolved claim is
-  saved as a short note, filed under both the individual *and* their company. A
-  new claim from either pulls the relevant past resolutions into the draft — so
-  it's consistent with how the account was handled before, no matter which
-  adjuster is on it now.
+- **Surfaces the customer's history automatically.** Every *closed* claim is
+  saved as a short note — the real outcome (approved / denied), not the draft —
+  filed under both the individual *and* their company. A new claim from either
+  pulls the relevant history into the draft, so it's consistent with how the
+  account was handled before, no matter which adjuster is on it now.
 - **Records what it used.** Every draft carries a trace of the policy sections,
-  documents, checks, and prior resolutions it drew on.
+  documents, checks, and prior outcomes it drew on.
 
 The adjuster reviews, edits, and approves each draft; ticks the checklist as
 documents arrive; and makes the coverage call. The blank-page work is gone.
@@ -152,7 +157,7 @@ flowchart TD
 - **Models** — Groq `openai/gpt-oss-20b` (drafts), `openai/gpt-oss-120b` (eval
   judge), Google `gemini-embedding-001` (embeddings).
 
-### The claim lifecycle — the AI drafts at three points
+### The claim lifecycle — FNOL to closure
 
 ```mermaid
 stateDiagram-v2
@@ -160,14 +165,17 @@ stateDiagram-v2
     intake --> awaiting_documents: intake draft approved
     awaiting_documents --> awaiting_documents: follow-up drafts as the claimant replies
     awaiting_documents --> review_ready: all checklist items verified
-    review_ready --> resolved: coverage recommendation approved
-    resolved --> [*]
+    review_ready --> settlement: coverage recommendation approved
+    settlement --> closed: decision + repair + payment recorded
+    closed --> [*]
 ```
 
-Each draft is **one LLM call** with a deterministic template fallback. The intake
-draft runs a hard pre-check (impact detail present? — a claim too thin, or a bare
-injection attempt, never reaches the model) and then folds memory, retrieval, and
-three plain-Python signal checks into a single prompt.
+The AI drafts at four points (intake request, follow-up chase, coverage
+recommendation, closure notice). Each draft is **one LLM call** with a
+deterministic template fallback — and a denial notice is a fixed template, no LLM.
+The intake draft runs a hard pre-check (impact detail present? — a claim too thin,
+or a bare injection attempt, never reaches the model) and then folds memory,
+retrieval, and three plain-Python signal checks into a single prompt.
 
 Full walkthrough — the layer cake, the request flow, the lifecycle state machine:
 [`docs/architecture.md`](docs/architecture.md).

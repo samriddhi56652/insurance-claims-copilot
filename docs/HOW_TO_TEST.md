@@ -116,10 +116,10 @@ run:
 1. **Register Claim (FNOL)** — claimant email/name, the incident fields, and pick
    a **Claim Type** (this drives the checklist). Use a `@example.com` email.
    Claim Summary >= 3 chars, FNOL Description >= 10 chars. Leave auto-generate on.
-2. Stage **1/4 Intake.** Select the claim. Review the **Intake response** draft
+2. Stage **1/5 Intake.** Select the claim. Review the **Intake response** draft
    (usually a request for documents). Edit if needed, click **Approve & Send to
    Claimant**.
-3. Stage **2/4 Awaiting documents.** The **documents checklist** appears, seeded
+3. Stage **2/5 Awaiting documents.** The **documents checklist** appears, seeded
    from the claim type. Also a **correspondence log** — the approved draft is
    already logged as "sent".
    - Use **Log a claimant reply** to paste in what the claimant "sent back".
@@ -127,10 +127,17 @@ run:
      `waived`) and a note, then **Save**.
    - Optionally click **Draft Follow-up Request** — it should chase *only* the
      rows still `needed`, with no coverage opinion.
-4. When every row is `verified`/`waived` the banner flips to **3/4 Ready for
+4. When every row is `verified`/`waived` the banner flips to **3/5 Ready for
    review**. Click **Generate Coverage Recommendation** (~5-25 s live Groq call).
-5. Review the coverage draft, click **Approve — Resolve Claim**. Banner → **4/4
-   Resolved**; the outcome is written to customer memory.
+5. Review the coverage draft, click **Approve & Move to Settlement**. Banner →
+   **4/5 Settlement**.
+6. Stage **4/5 Settlement.** Record the **coverage decision** (approve / deny +
+   a note). For an approval, tick **Repair authorized** and **Payment arranged**,
+   then **Save steps**. Optionally **Draft Closure Notice** (approval = live
+   call; denial = fixed template). Click **Close Claim**.
+7. Stage **5/5 Closed.** Read-only: the outcome, the adjuster note, the final
+   notice. The customer-history memory is written now — from the real outcome,
+   not the recommendation.
 
 To test just the intake draft (as the eval does), stop after step 2.
 
@@ -159,15 +166,20 @@ To test just the intake draft (as the eval does), stop after step 2.
 
 **Approve** does different things per draft kind:
 - **Intake response** -> logged as sent, checklist seeded, stage -> awaiting
-  documents. Claim **not** closed.
+  documents.
 - **Follow-up request** -> logged as sent; stage unchanged.
-- **Coverage recommendation** -> ticket resolved, stage -> resolved, resolution
-  memory written (RAM-only — see design gaps).
+- **Coverage recommendation** -> logged as sent, stage -> settlement. Does **not**
+  close the claim or write memory.
+- **Closure notice** -> logged as sent; stage unchanged.
 - **Discard / Request Info** -> sets the draft aside, no structural change.
 
-**Claim History Probe** — type a query, hit the button. Returns past *approved*
-resolutions for this customer / their company. Empty until you approve some (and
-after any server restart).
+**Close Claim** (settlement stage) -> sets the outcome, stage -> closed, and
+writes the customer-history memory from the real decision (RAM-only — see design
+gaps).
+
+**Claim History Probe** — type a query, hit the button. Returns past *closed*
+claims for this customer / their company, with the adjuster's outcome. Empty
+until you close some (and after any server restart).
 
 ### Red flags to note while testing
 

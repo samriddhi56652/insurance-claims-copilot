@@ -113,38 +113,24 @@ class CustomerMemoryStore:
             self._namespace_label(user_id),
         )
 
-    def add_resolution(
-        self,
-        user_id: str,
-        ticket_subject: str,
-        ticket_description: str,
-        accepted_draft: str,
-        entity_links: list[str] | None = None,
-    ) -> None:
-        entity_text = ""
-        if entity_links:
-            entity_text = "\nLinked entities: " + ", ".join(entity_links)
+    def add_closure(self, user_id: str, text: str) -> None:
+        """Store a customer-history record for a claim that has been closed.
 
-        memory_text = (
-            "Coverage recommendation approved by licensed adjuster.\n"
-            f"Claim subject: {ticket_subject}\n"
-            f"Claim details: {ticket_description}\n"
-            f"Approved recommendation: {accepted_draft.strip()}"
-            f"{entity_text}"
-        )
+        The caller (SupportCopilot.save_claim_closure) builds the text from the
+        real adjuster outcome, so this just persists it.
+        """
         logger.info(
-            "memory.add_resolution.start user=%s subject=%r entities=%s",
+            "memory.add_closure.start user=%s chars=%s",
             self._namespace_label(user_id),
-            (ticket_subject or "").strip()[:120],
-            len(entity_links or []),
+            len((text or "").strip()),
         )
         self._create_memory(
             user_id=user_id,
-            text=memory_text,
-            metadata={"type": "resolution"},
+            text=text,
+            metadata={"type": "closure"},
         )
         logger.info(
-            "memory.add_resolution.done user=%s",
+            "memory.add_closure.done user=%s",
             self._namespace_label(user_id),
         )
 

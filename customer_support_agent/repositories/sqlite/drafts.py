@@ -47,6 +47,19 @@ class DraftsRepository:
             row = conn.execute("SELECT * FROM drafts WHERE id = ?", (draft_id,)).fetchone()
             return row_to_dict(row)
 
+    def latest_of_kind(self, ticket_id: int, kind: str) -> dict[str, Any] | None:
+        with connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM drafts
+                WHERE ticket_id = ? AND kind = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                (ticket_id, kind),
+            ).fetchone()
+            return row_to_dict(row)
+
 
     def update(
         self,

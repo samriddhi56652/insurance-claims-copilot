@@ -5,7 +5,6 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 
 from customer_support_agent.api.dependencies import (
-    get_copilot,
     get_draft_service,
     get_drafts_repository,
     get_tickets_repository,
@@ -56,7 +55,6 @@ def update_draft_route(
             content=updated["content"],
             drafts_repo=drafts_repo,
             tickets_repo=tickets_repo,
-            draft_service=draft_service,
             workflow=workflow,
         )
 
@@ -70,16 +68,17 @@ def _handle_acceptance(
     content: str,
     drafts_repo: DraftsRepository,
     tickets_repo: TicketsRepository,
-    draft_service: DraftService,
     workflow: WorkflowService,
 ) -> None:
     """Approving a draft means different things depending on which draft it is.
 
-    - intake_request       -> record it as sent, seed the checklist, move the
-                              claim to 'awaiting_documents'.
-    - followup_request     -> record it as sent; the claim stays where it is.
-    - coverage_recommendation -> resolve the claim and save the resolution memory
-                              (this is the only draft that closes a claim).
+    - intake_request          -> record it as sent, seed the checklist, move the
+                                 claim to 'awaiting_documents'.
+    - followup_request        -> record it as sent; the claim stays where it is.
+    - coverage_recommendation -> record it as sent, move the claim into
+                                 'settlement'. It does NOT close the claim or
+                                 write memory - that happens at closure.
+    - closure_notice          -> record it as sent; no stage change.
     """
     relation = drafts_repo.get_ticket_and_customer_by_draft(draft_id)
     if not relation:
@@ -93,24 +92,10 @@ def _handle_acceptance(
         logger.exception("Failed to log sent correspondence for ticket_id=%s", ticket_id)
 
     if draft_kind == "coverage_recommendation":
-        tickets_repo.set_status(ticket_id, "resolved")
-        workflow.mark_resolved(ticket_id)
-        try:
-            context_used = draft_service.parse_context_used(relation.get("context_used"))
-            get_copilot().save_accepted_resolution(
-                customer_email=relation["customer_email"],
-                customer_company=relation.get("customer_company"),
-                ticket_subject=relation["subject"],
-                ticket_description=relation["description"],
-                draft_content=content,
-                context_used=context_used,
-            )
-        except Exception:
-            # Draft acceptance must still succeed even if the memory save fails.
-            logger.exception("Resolution memory save failed for ticket_id=%s", ticket_id)
+        workflow.enter_settlement(ticket_id)
         return
 
-    if draft_kind == "followup_request":
+    if draft_kind in ("followup_request", "closure_notice"):
         workflow.refresh_stage(ticket_id)
         return
 

@@ -89,6 +89,49 @@ class TicketsRepository:
             row = conn.execute("SELECT * FROM tickets WHERE id = ?", (ticket_id,)).fetchone()
             return row_to_dict(row)
 
+    _SETTLEMENT_FIELDS = (
+        "coverage_decision",
+        "decision_note",
+        "repair_authorized",
+        "payment_arranged",
+    )
+
+    def update_settlement(
+        self, ticket_id: int, **fields: Any
+    ) -> dict[str, Any] | None:
+        """Set one or more settlement fields (coverage_decision, decision_note,
+        repair_authorized, payment_arranged)."""
+        updates: list[str] = []
+        values: list[Any] = []
+        for name, value in fields.items():
+            if name not in self._SETTLEMENT_FIELDS:
+                raise ValueError(f"unknown settlement field: {name}")
+            updates.append(f"{name} = ?")
+            values.append(int(value) if name in ("repair_authorized", "payment_arranged") else value)
+        if not updates:
+            return self.get_by_id(ticket_id)
+        with connect() as conn:
+            values.append(ticket_id)
+            conn.execute(
+                f"UPDATE tickets SET {', '.join(updates)} WHERE id = ?", values
+            )
+        return self.get_by_id(ticket_id)
+
+    def close(
+        self, ticket_id: int, outcome: str
+    ) -> dict[str, Any] | None:
+        with connect() as conn:
+            conn.execute(
+                """
+                UPDATE tickets
+                SET outcome = ?, status = 'closed', lifecycle_stage = 'closed',
+                    closed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (outcome, ticket_id),
+            )
+        return self.get_by_id(ticket_id)
+
     def count_open_for_customer(self, customer_email: str) -> int:
         with connect() as conn:
             row = conn.execute(
