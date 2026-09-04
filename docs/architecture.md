@@ -25,36 +25,45 @@ backend is fully usable on its own through `/docs` or `curl`.
 
 ```mermaid
 flowchart TD
-    UI["Browser — Streamlit dashboard<br/>app.py · forms, tables, session_state · :8501"]
-    subgraph API["FastAPI application — main.py + app_factory.py"]
-      R["routers: health · tickets · drafts · knowledge · memory"]
-      D["dependencies.py — Depends(...) wiring, @lru_cache copilot"]
+    UI["Browser: Streamlit dashboard (app.py, :8501)"]
+
+    subgraph API["FastAPI application"]
+      R["Routers: health, tickets, drafts, workflow, knowledge, memory"]
+      D["dependencies.py: Depends wiring, lru_cache copilot"]
     end
-    subgraph SVC["Services — request orchestration"]
+
+    subgraph SVC["Services"]
       DS["DraftService"]
       KS["KnowledgeService"]
-      CP["SupportCopilot (AI orchestrator)"]
+      CP["SupportCopilot"]
+      WF["WorkflowService"]
     end
-    subgraph DET["Deterministic branch"]
-      REPO["Repositories — repositories/sqlite/<br/>raw SQL, no ORM"]
-      DB[("SQLite — data/support.db")]
-    end
+
     subgraph AICP["SupportCopilot.generate_draft"]
       GATE["intake gate (deterministic)"]
-      RAG["RAG — Chroma"]
-      MEM["Memory — langmem store"]
+      RAG["RAG (Chroma)"]
+      MEM["Memory (langmem)"]
       SIG["3 signal checks (SLA, priority, load)"]
-      LLM["one LLM call → Groq"]
+      LLM["one LLM call (Groq)"]
     end
-    EXT["External APIs — Groq (chat) · Google Gemini (embeddings)"]
 
-    UI -- "HTTP + JSON (requests → :8000)" --> R
+    REPO["Repositories: raw SQL, no ORM"]
+    DB[("SQLite: data/support.db")]
+    EXT["External APIs: Groq chat, Google Gemini embeddings"]
+
+    UI -->|HTTP + JSON| R
     R --> D
-    D --> DS & KS & CP
-    DS --> REPO --> DB
-    CP --> GATE --> RAG --> MEM --> SIG --> LLM
-    RAG -.embeddings.-> EXT
-    LLM -.HTTPS.-> EXT
+    D --> DS
+    D --> KS
+    D --> CP
+    D --> WF
+    DS --> REPO
+    WF --> REPO
+    REPO --> DB
+    CP --> GATE
+    GATE --> RAG --> MEM --> SIG --> LLM
+    RAG -.->|embeddings| EXT
+    LLM -.->|HTTPS| EXT
 ```
 
 Every request enters at a **router**, which declares what it needs with
@@ -130,15 +139,15 @@ Two dependencies are special:
 
 ```mermaid
 flowchart TD
-    F["Streamlit form — create_ticket()"] -- "POST /api/tickets" --> RT["tickets router — create_ticket_route"]
-    RT --> W["customers_repo.create_or_get<br/>tickets_repo.create<br/>(2 SQLite writes)"]
+    F["Streamlit form: create_ticket()"] -->|POST /api/tickets| RT["tickets router"]
+    RT --> W["create customer + ticket rows (2 SQLite writes)"]
     W --> DBW[("support.db")]
-    W --> Q{"auto_generate?<br/>(from the form)"}
-    Q -- "no / always" --> RESP["200 — ticket JSON<br/>returns at once"]
-    Q -- "yes → BackgroundTasks" --> BG["DraftService.generate_and_store_background"]
-    BG --> GD["SupportCopilot.generate_draft<br/>gate → memory + RAG + signal checks (§04)<br/>one prompt → one Groq call<br/>assemble draft + context_used"]
-    GD -- "drafts_repo.create (SQLite write)" --> DBW
-    SL["Streamlit (later) — fetch_draft()"] -- "GET /api/drafts/{ticket_id}" --> DBW
+    W --> Q{"auto_generate?"}
+    Q -->|no| RESP["200: ticket JSON, returns at once"]
+    Q -->|yes| BG["BackgroundTasks: generate_and_store_background"]
+    BG --> GD["SupportCopilot.generate_draft: gate, retrieval, signals, one Groq call"]
+    GD -->|drafts_repo.create| DBW
+    SL["Streamlit later: fetch_draft()"] -->|GET /api/drafts/id| DBW
 ```
 
 The `POST` writes the customer and ticket rows and **returns immediately** — the
@@ -182,17 +191,17 @@ and, deliberately, **only one LLM call**.
 
 ```mermaid
 flowchart TD
-    IN["ticket + customer"] --> GATE{"intake gate — assess_intake()<br/>is an impact detail present? (FNOL rule)"}
-    GATE -- "no" --> FIX["fixed 'need more info' reply<br/>no model call · blocks injections"]
-    GATE -- "yes" --> MEM["memory search — langmem<br/>2 scopes · Gemini / recency"]
-    GATE -- "yes" --> RAG["RAG search — Chroma<br/>top_k chunks · Gemini embeddings"]
-    GATE -- "yes" --> SIG["3 signal checks — plain Python<br/>get_claim_sla · assess_claim_priority · lookup_open_ticket_load"]
-    MEM --> P["one prompt<br/>SLA standards + coverage decision tree + memory + KB<br/>+ signal results + claimant submission (delimited)"]
+    IN["ticket + customer"] --> GATE{"intake gate: impact detail present?"}
+    GATE -->|no| FIX["fixed 'need more info' reply (no model call)"]
+    GATE -->|yes| MEM["memory search (langmem, 2 scopes)"]
+    GATE -->|yes| RAG["RAG search (Chroma + Gemini)"]
+    GATE -->|yes| SIG["3 signal checks (plain Python)"]
+    MEM --> P["one prompt: standards + decision tree + memory + KB + signals + claim"]
     RAG --> P
     SIG --> P
-    P --> LLM["one LLM call — Groq · gpt-oss-20b"]
-    LLM -- "empty?" --> T["deterministic template"]
-    LLM --> R["return { draft, context_used }"]
+    P --> LLM["one LLM call: Groq gpt-oss-20b"]
+    LLM -->|empty| T["deterministic template"]
+    LLM --> R["return draft + context_used"]
     T --> R
 ```
 
@@ -248,11 +257,11 @@ works a documents checklist in between.
 ```mermaid
 stateDiagram-v2
     [*] --> intake: claim registered
-    intake --> awaiting_documents: intake_request draft approved<br/>(checklist seeded, recorded as sent)
-    awaiting_documents --> awaiting_documents: claimant replies -> adjuster ticks items<br/>followup_request drafts as needed
+    intake --> awaiting_documents: intake_request draft approved (checklist seeded)
+    awaiting_documents --> awaiting_documents: claimant replies, adjuster ticks items
     awaiting_documents --> review_ready: every checklist item verified or waived
     review_ready --> awaiting_documents: an item is un-verified
-    review_ready --> resolved: coverage_recommendation draft approved<br/>(claim resolved, saved to memory)
+    review_ready --> resolved: coverage_recommendation approved (saved to memory)
     resolved --> [*]
 ```
 

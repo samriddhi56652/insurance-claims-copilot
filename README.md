@@ -126,18 +126,18 @@ python -m streamlit run app.py                     # dashboard  :8501  (second t
 
 ```mermaid
 flowchart TD
-    UI["Browser — Streamlit dashboard<br/>(app.py)"]
-    API["FastAPI — 16 routes<br/>(customer_support_agent/api)"]
-    SVC["Services — DraftService · KnowledgeService · SupportCopilot"]
-    REPO["Repositories → SQLite (support.db)"]
-    COP["SupportCopilot.generate_draft"]
-    EXT["Groq (LLM) · Google Gemini (embeddings)"]
+    UI["Browser: Streamlit dashboard (app.py)"]
+    API["FastAPI: 16 routes"]
+    SVC["Services: DraftService, KnowledgeService, SupportCopilot, WorkflowService"]
+    REPO["Repositories: raw SQL"]
+    DB[("SQLite: support.db")]
+    EXT["Groq LLM, Google Gemini embeddings"]
 
-    UI -- "HTTP / JSON" --> API
-    API -- "Depends(...)" --> SVC
+    UI -->|HTTP / JSON| API
+    API -->|Depends| SVC
     SVC --> REPO
-    SVC --> COP
-    COP --> EXT
+    REPO --> DB
+    SVC -->|generate_draft| EXT
 ```
 
 - **Backend** — FastAPI, layered (routers → dependency injection → services →
@@ -155,14 +155,13 @@ flowchart TD
 ### The claim lifecycle — the AI drafts at three points
 
 ```mermaid
-flowchart LR
-    R["claim<br/>registered"] --> I["intake<br/>request draft"]
-    I -->|adjuster approves| A["awaiting documents<br/>checklist + correspondence"]
-    A -->|claimant replies| F["follow-up<br/>request draft"]
-    F -->|adjuster approves| A
-    A -->|all items verified| RR["review<br/>ready"]
-    RR --> C["coverage<br/>recommendation draft"]
-    C -->|adjuster approves| RES["resolved<br/>saved to memory"]
+stateDiagram-v2
+    [*] --> intake: claim registered
+    intake --> awaiting_documents: intake draft approved
+    awaiting_documents --> awaiting_documents: follow-up drafts as the claimant replies
+    awaiting_documents --> review_ready: all checklist items verified
+    review_ready --> resolved: coverage recommendation approved
+    resolved --> [*]
 ```
 
 Each draft is **one LLM call** with a deterministic template fallback. The intake
