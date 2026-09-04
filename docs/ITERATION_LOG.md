@@ -347,8 +347,8 @@ that claim type.
 
 The follow-up draft uses a trimmed prompt (no coverage decision tree — it's not
 classifying anything, just listing what's missing). The coverage recommendation
-reuses the full intake prompt plus the verified checklist and correspondence.
-Each is still **one** model call, with the same deterministic-template fallback.
+gets its own prompt too (see 2.6). Each is still **one** model call, with the
+same deterministic-template fallback.
 
 **Why:** the single "first draft = final answer" model didn't match how a claim
 actually moves. Most first drafts are requests for information; the real coverage
@@ -405,6 +405,36 @@ multi-step process.
 **Impact:** the demo now walks the full arc: register a thin claim -> AI asks for
 documents -> adjuster sends it, logs the claimant's reply, ticks the checklist ->
 AI writes the coverage position -> adjuster resolves.
+
+### 2.6 — The coverage recommendation stopped reading like an intake reply
+**What:** gave the coverage-recommendation draft its own system prompt instead of
+borrowing the intake one.
+
+The first version reused the intake prompt, which tells the model to "include the
+required documents" and injects the SLA text that is all about *waiting for*
+documents ("document sufficiency check within 1 business day of receipt";
+"preliminary coverage recommendation within 2 business days after the required
+documents are received"). So the stage-3 draft, produced *after* every document
+was verified, still said things like "verify the towing receipt" and quoted the
+document-collection timeline — it read almost like the stage-1 reply.
+
+The new `_build_coverage_system_prompt` keeps the coverage decision tree and the
+safety / no-invented-numbers rules but: drops the "list the required documents"
+instruction, drops the FNOL / sufficiency SLA lines, and tells the model the file
+is complete — lead with the coverage position and reasoning from the verified
+evidence, and make the next step a *settlement* step (approve the estimate,
+authorise repair, arrange payment), not a document step.
+
+**Before:** "...Verify the towing receipt... document sufficiency check within
+1 business day of receipt... within 2 business days after all required documents
+are received..."
+**After:** "Collision coverage applies... All required collision documentation —
+scene photos, police report PDX-2026-88214, repair estimate, vehicle registration
+— has been verified... Next step: the adjuster should approve the repair estimate,
+authorise the body shop, and arrange payment."
+
+**Impact:** the three drafts now sound like three different stages. Still one
+model call each; still unevaluated (see the note below).
 
 ### Note — the new drafts are smoke-tested, not evaluated
 The full lifecycle was run once end to end against the live model: register a
