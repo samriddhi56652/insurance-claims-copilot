@@ -90,6 +90,10 @@ class KnowledgeBaseService:
             "collection_count": self._collection.count(),
         }
 
+    def count(self) -> int:
+        """Number of indexed chunks currently in the collection."""
+        return self._collection.count()
+
     def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         if self._collection.count() == 0:
             return []

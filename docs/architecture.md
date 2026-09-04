@@ -1,10 +1,11 @@
 # How the Claims Copilot works, front to back
 
-A Streamlit dashboard for adjusters and a FastAPI service that turns a claim into a
-coverage-recommendation draft: a deterministic intake gate, retrieval over a policy
-knowledge base, three rule-based signal checks, and **one** LLM call — over a plain
-SQLite system of record. Here is what each part does and how a claim moves through
-them.
+A Streamlit dashboard for adjusters and a FastAPI service that carries a claim
+from first notice of loss to a closed decision. The AI drafts every
+customer-facing message — a deterministic intake gate, retrieval over a policy
+knowledge base, three rule-based signal checks, and **one** LLM call per draft —
+over a plain SQLite system of record. Here is what each part does and how a claim
+moves through them.
 
 ---
 
@@ -85,18 +86,20 @@ callback wiring; the current state *is* whatever the code computes this run.
 **What it actually contains:**
 
 - **A thin API client.** Functions like `fetch_tickets()`, `create_ticket()`,
-  `trigger_draft()`, `update_draft()`, `ingest_knowledge()`, `search_memory()` —
-  each is a one- or two-line `requests` call to `API_BASE_URL` (default
-  `http://localhost:8000`) with error unwrapping.
-- **The FNOL form.** Collects claimant + incident fields, composes them into a
-  single `description` string (`_compose_claim_description`), and `POST`s to
-  `/api/tickets`.
-- **The claim workbench.** A `selectbox` of existing claims; for the selected one
-  it shows the claimant, the claim text, a **Generate Coverage Recommendation**
-  button, an editable draft box, and **Approve** / **Request Info** buttons.
+  `trigger_draft()`, `fetch_workflow()`, `update_requirement()`,
+  `add_correspondence()`, `update_settlement()`, `close_claim()` — each is a one-
+  or two-line `requests` call to `API_BASE_URL` (default `http://localhost:8000`)
+  with error unwrapping.
+- **The FNOL form.** Collects claimant + incident fields (including the claim
+  type), composes them into a single `description` string
+  (`_compose_claim_description`), and `POST`s to `/api/tickets`.
+- **The stage-aware workbench.** A `selectbox` of existing claims; for the
+  selected one it shows a **stage banner** ("N/5") and a different panel per
+  stage — the editable draft with approve/discard, the documents checklist, the
+  correspondence log, the settlement controls, or the read-only closed view.
 - **The context panel.** `render_context()` unpacks the `context_used` blob the
-  backend attaches to a draft — metric tiles (memory hits, KB hits, tool calls,
-  tool errors), highlights, and a per-tool-call expander.
+  backend attaches to a draft — metric tiles (claim-history hits, KB hits, signal
+  checks, errors), highlights, and a per-check expander.
 
 **The two state mechanisms:**
 
@@ -114,15 +117,17 @@ That's the whole frontend. It never imports anything from
 ## 02 · The backend — four layers
 
 `main.py` calls `create_app()` (`app_factory.py`), which builds the FastAPI
-instance, registers a `lifespan` hook that runs `ensure_directories()` +
-`init_db()` once at startup, and mounts the five routers. Then `uvicorn` serves it.
+instance, registers a `lifespan` hook that runs `ensure_directories()`,
+`init_db()`, and a one-time knowledge-base index at startup, and mounts the six
+routers (`health`, `tickets`, `drafts`, `workflow`, `knowledge`, `memory`). Then
+`uvicorn` serves it.
 
 | Layer | File(s) | Responsibility |
 |---|---|---|
 | **1 · Routers** | `api/routers/*.py` | Pure HTTP: path/query params, status codes, response models. Each route lists its dependencies as `= Depends(get_…)` arguments. Never opens a DB connection or calls an LLM directly — it delegates. |
 | **2 · Dependencies** | `api/dependencies.py` | The wiring. Small factory functions that build a repository or service on demand. |
-| **3 · Services** | `services/*.py` | `DraftService` (orchestrates: calls the copilot, normalises, serialises, owns the background + manual draft workflows), `KnowledgeService` (a one-method ingest wrapper), `SupportCopilot` (the brain — §04). |
-| **4 · Repositories** | `repositories/sqlite/*.py` | One class per table. Hand-written SQL through `sqlite3`, rows returned as plain dicts (`row_to_dict`). `base.py` owns the connection factory and the `CREATE TABLE IF NOT EXISTS` schema. No ORM, no migrations. |
+| **3 · Services** | `services/*.py` | `DraftService` (orchestrates draft generation + storage), `KnowledgeService` (ingest wrapper), `WorkflowService` (owns the lifecycle stage transitions and the close-claim logic), `SupportCopilot` (the brain — §04); plus `intake_check` and `requirements_catalog` as plain modules. |
+| **4 · Repositories** | `repositories/sqlite/*.py` | One class per table. Hand-written SQL through `sqlite3`, rows returned as plain dicts (`row_to_dict`). `base.py` owns the connection factory, the `CREATE TABLE IF NOT EXISTS` schema, and a small guarded `ALTER TABLE` migration step for the columns added in Phases 2–3. No ORM. |
 
 Two dependencies are special:
 
@@ -154,7 +159,7 @@ The `POST` writes the customer and ticket rows and **returns immediately** — t
 adjuster sees "Claim #N registered" in well under a second. When `auto_generate`
 is on, draft generation is handed to FastAPI's `BackgroundTasks` and runs after
 the response is sent. The frontend polls `GET /api/drafts/{ticket_id}` to pick up
-the result once it lands. The manual **Generate Recommendation** button skips the
+the result once it lands. The manual **Generate Intake Response** button skips the
 fork and runs `generate_draft` synchronously via
 `POST /api/tickets/{id}/generate-draft`.
 
@@ -184,8 +189,9 @@ durable.
 
 This is where the AI happens. `generate_draft` takes a `mode` — this section
 describes the default, **`intake_request`** (the first reply to a claim). The
-other two modes (`followup_request`, `coverage_recommendation`) are covered in
-§05. All three are one LLM call with the same template fallback.
+other three modes (`followup_request`, `coverage_recommendation`,
+`closure_notice`) are covered in §05. Each is one LLM call with a
+deterministic-template fallback; a denial notice skips the LLM entirely.
 
 Given a `ticket` and `customer` dict, the intake path runs a fixed sequence —
 and, deliberately, **only one LLM call**.
@@ -344,11 +350,12 @@ before/after is in [`ITERATION_LOG.md`](ITERATION_LOG.md); groundedness moved fr
 **1.11 to 1.71 out of 2** across the fixes, and two classes of claim (too-vague,
 injection) are now refused before the model runs.
 
-> **Not yet covered:** the Phase 2/3 `followup_request`,
-> `coverage_recommendation` and `closure_notice` drafts have no labelled cases or
-> judge pass yet. The plumbing is verified end to end, but "are these drafts
-> reliably good?" is an open question — see the note at the end of
-> [`ITERATION_LOG.md`](ITERATION_LOG.md) Phase 2.
+> **Not yet covered:** the `followup_request`, `coverage_recommendation` and
+> `closure_notice` drafts have no automated judge pass yet. The plumbing is
+> verified end to end, and the coverage recommendation has been hand-checked
+> against the judge's rubric (ITERATION_LOG §3.7) — but the automated sweep is
+> still open, ~half a day of work. See the notes at the end of Phase 2 and §3.7
+> in [`ITERATION_LOG.md`](ITERATION_LOG.md).
 
 Run it: `python evals/run_eval.py`. Manual test walkthrough:
 [`HOW_TO_TEST.md`](HOW_TO_TEST.md).

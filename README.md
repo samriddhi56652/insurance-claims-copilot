@@ -116,6 +116,9 @@ docker compose up
 - Dashboard → **http://localhost:8501**
 - API docs → **http://localhost:8000/docs**
 
+On first start the API indexes the policy documents automatically (a one-time
+step, ~15 s). Then register a claim in the dashboard and it runs end to end.
+
 Without Docker:
 
 ```bash
@@ -132,7 +135,7 @@ python -m streamlit run app.py                     # dashboard  :8501  (second t
 ```mermaid
 flowchart TD
     UI["Browser: Streamlit dashboard (app.py)"]
-    API["FastAPI: 16 routes"]
+    API["FastAPI: 18 routes"]
     SVC["Services: DraftService, KnowledgeService, SupportCopilot, WorkflowService"]
     REPO["Repositories: raw SQL"]
     DB[("SQLite: support.db")]

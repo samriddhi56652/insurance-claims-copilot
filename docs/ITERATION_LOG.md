@@ -5,12 +5,20 @@ and what it changed. Plain language.
 
 ## The short version
 
-The project arrived as a half-finished template that wouldn't even start. Phase 0
-was getting it running and fixing the bugs that showed up. Phase 1 was the real
-work: **building a way to measure whether the AI's draft replies are any good**,
-then using those measurements to fix the biggest problems — the AI inventing
-facts, a broken helper tool feeding it fake data, and the AI over-confidently
-guessing on claims that were too vague to judge.
+The project arrived as a half-finished template that wouldn't even start.
+
+- **Phase 0** — got it running and fixed the bugs that showed up.
+- **Phase 1** — the core idea: **built a way to measure whether the AI's draft
+  replies are any good**, then used those numbers to fix the biggest problems —
+  the AI inventing facts, a broken helper tool feeding it fake data, and the AI
+  guessing on claims too vague to judge.
+- **Phase 2** — turned the single "first draft = final answer" into the real
+  multi-round loop: the AI asks for documents, an adjuster works a checklist, and
+  only when the file is complete does the AI draft an actual coverage position.
+- **Phase 3** — carried the claim past the recommendation to a real close: the
+  adjuster records the decision (approve / deny) and the settlement steps, a
+  closure notice goes to the claimant, and the customer-history memory is written
+  from the real outcome.
 
 ---
 
@@ -86,7 +94,7 @@ would have made the "did search find the right document?" metric misleading — 
 bad score caused by junk in the folder, not by the search design. Removed them:
 9 files → **5 files, all insurance**.
 
-### 1.2 — Built a test set of 15 claims *(started at 10, later 14)*
+### 1.2 — Built a test set of claims *(started at 10, grew to 14)*
 Wrote a set of realistic claims by hand (`evals/dataset/claims.jsonl`), each
 labelled with the *correct* answer: which coverage type applies, which documents
 should be requested, whether it should be flagged as urgent or as needing more
@@ -296,6 +304,12 @@ coverage position.
 
 Phase 2 builds that loop. (Formal evaluation of the new drafts is deferred — see
 the note at the end of the phase.)
+
+> **Read this alongside Phase 3.** Phase 2 ends a claim at a stage called
+> `resolved` and writes the customer memory when the coverage recommendation is
+> approved. Phase 3 renamed that stage to `settlement`, added a real `closed`
+> stage after it, and moved the memory write to the close action. Where Phase 2
+> below says "resolved" / "closes the claim", Phase 3 is the current behaviour.
 
 ### 2.1 — A claim lifecycle, a checklist, and a correspondence log (data model)
 **What:** added the storage the workflow needs.

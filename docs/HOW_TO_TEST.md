@@ -26,8 +26,10 @@ python evals/run_eval.py --only fraud-01,glass-01
 python evals/run_eval.py --keep               # leave the eval tickets in the DB to inspect in the UI
 ```
 
-> The harness currently exercises the **intake** draft only. The Phase 2
-> follow-up and coverage-recommendation drafts are not scored yet.
+> The harness currently exercises the **intake** draft only. The follow-up,
+> coverage-recommendation and closure-notice drafts are not in it yet — the
+> coverage recommendation has a hand check (ITERATION_LOG §3.7); the automated
+> sweep is scoped, ~half a day.
 
 On Windows PowerShell prefix with `$env:PYTHONIOENCODING="utf-8";` if you see a
 `charmap` error.
@@ -151,16 +153,17 @@ To test just the intake draft (as the eval does), stop after step 2.
 - for a suspicious claim, say "additional verification required" *without*
   accusing?
 
-**"Context used for recommendation"** expander — the observability panel:
+**"Context used for this draft"** expander — the observability panel:
 - **Claim History Hits / Policy&KB Hits / Decision Tool Calls / Tool Errors** —
   the four tiles. KB hits should be > 0 for a normal claim; tool errors should
   be 0.
 - **Policy/regulation sources** — which KB files were retrieved. Sanity check
   they're relevant to the claim.
-- **Tool Calls** table + per-call expander — what the agent asked and got back.
-  The three tools: `get_claim_sla` (fixed settlement SLA), `assess_claim_priority`
-  (urgent/standard vs the FNOL escalation triggers), `lookup_open_ticket_load`
-  (live open-claim count from the DB). All return real data.
+- **Tool Calls** table + per-call expander — what each signal check returned
+  (they run in plain Python, not via an agent). The three: `get_claim_sla`
+  (fixed settlement SLA), `assess_claim_priority` (urgent/standard vs the FNOL
+  escalation triggers), `lookup_open_ticket_load` (live open-claim count from the
+  DB). All return real data.
 - **Context Errors** — should be empty. "Memory disabled" or embedding errors
   show up here.
 
@@ -189,8 +192,8 @@ until you close some (and after any server restart).
 | any "Confidence: ..." line | the prompt now tells it not to state confidence; if it appears, the rule slipped |
 | an SLA/timeline not in `insurance-claims-settlement-sla-and-communication.md` (e.g. "48 hours", "3-5 days") | model invented a timeframe — the fixed SLA context should prevent this |
 | any mention of a customer "plan" or "tier" | regression — `lookup_customer_plan` was removed; no plan concept exists |
-| commits to a coverage on a vague claim | doesn't handle insufficient information (finding #3, open) |
-| KB hits = 0 on a normal claim | retrieval failure — check the KB was ingested (`POST /api/knowledge/ingest`) |
+| the AI names a coverage on a claim with no impact detail | the intake gate (ITERATION_LOG §1.8) should have caught this before the model ran |
+| KB hits = 0 on a normal claim | retrieval failure — the KB self-indexes on startup; if empty, run `POST /api/knowledge/ingest` |
 | Context Errors non-empty | embeddings / memory / tool problem |
 
 ---

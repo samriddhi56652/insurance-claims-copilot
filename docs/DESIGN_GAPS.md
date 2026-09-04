@@ -102,8 +102,8 @@ Where a funded product with a team behind it goes further:
 | Integration | Standalone application | Embeds into core claims systems (e.g. Guidewire, Duck Creek) |
 | Knowledge base | 5 synthetic policy documents | Real carrier policy and procedure libraries |
 
-None of these are oversights. They are the distance between a two-phase portfolio
-build and a product with funding and a roadmap.
+None of these are oversights. They are the distance between a portfolio build and
+a product with funding and a roadmap.
 
 ---
 

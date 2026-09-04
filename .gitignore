@@ -15,8 +15,9 @@ data/
 .claude/
 .DS_Store
 
-# Eval output — ignore run artefacts, keep two curated before/after summaries
+# Eval output — ignore run artefacts, keep the three curated before/after summaries
 evals/results/*
 !evals/results/README.md
 !evals/results/summary-20260903-095739.md
+!evals/results/summary-20260903-100140.md
 !evals/results/summary-20260903-180818.md
