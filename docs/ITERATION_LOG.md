@@ -59,12 +59,13 @@ config for development, keeping the default build clean and deployable. Result:
 end-to-end inside the containers.
 
 ### 0.7 — Wrote down every architectural weakness
-Did a full read-through of the codebase and listed **15 design gaps** — no login,
-customer "memory" that's wiped on restart, database locking under load, a helper
-tool that returns made-up data, and more. See `docs/DESIGN_GAPS.md`. The decision:
-this is a portfolio project, so fix the cheap and visible ones, and *document* the
-rest as "known limitations / next steps" — being able to name what's wrong is
-itself the point.
+Did a full read-through of the codebase and listed every gap between this
+prototype and production — no login, customer "memory" that's wiped on restart,
+database locking under load, a helper tool that returns made-up data, and more.
+See `docs/DESIGN_GAPS.md` (later rewritten by theme for a non-technical reader).
+The decision: this is a portfolio project, so fix the cheap and visible ones, and
+*document* the rest as "known limitations / next steps" — being able to name
+what's wrong is itself the point.
 
 ### 0.8 — Secrets hygiene
 Added a blank `.env.example` template; confirmed the real `.env` (with API keys)
@@ -540,3 +541,24 @@ stage is read-only: the outcome, the adjuster note, and the final notice.
 rec approved -> `settlement` -> record decision + steps -> `close` -> `closed`,
 `outcome=approved`, and a clean outcome-based memory. The close endpoint is
 idempotent (a second call returns 409).
+
+### 3.6 — Rewrote the "design gaps" doc for a non-technical reader
+**What:** `docs/DESIGN_GAPS.md` was an engineer's list organised by code-severity
+tiers, full of identifiers like `busy_timeout` and `except: pass`. Rewrote it by
+**theme a strategy reader cares about**: measuring the AI (and where that
+measurement stops), trust & governance, reliability & scale, and capability gaps
+versus a real commercial platform (benchmarked against Shift Technology, Five
+Sigma, and Lorikeet). Every item now says *why it matters* and a rough cost, in
+plain language. The genuinely code-level rough edges are kept but demoted to a
+short "for a technical reviewer" list at the bottom.
+
+Also folded in two gaps the market comparison surfaced: the AI's original draft
+is overwritten when an adjuster edits and approves (losing the best
+improvement signal), and there is no feedback loop from adjuster corrections.
+
+**Why:** the doc is a portfolio artefact meant to be read by hiring managers and
+consultants, not just engineers. "Can name what's wrong, and why" only lands if
+the reader can follow it on the first pass.
+
+**Impact:** documentation only — no code changed. README's gap summary updated to
+match.

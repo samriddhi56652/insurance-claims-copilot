@@ -1,141 +1,128 @@
-# Design Gaps & Next Steps
+# What this prototype does not do yet — and what production would take
 
-A deliberate catalogue of what this system does **not** do well yet, found in a
-full-codebase review. Nothing here is a surprise — each item is a conscious
-trade-off for a prototype, listed with the fix and its rough cost.
+This is a working prototype, built to prove one idea: that you can develop a
+GenAI copilot **by measuring whether its output is actually good**, not by
+assuming it. It runs end to end — a claim goes from first notice of loss to a
+closed decision — but it is not production software.
 
-Priority is for **"before real adjusters or a public URL touch it"**, not for a
-local demo.
-
----
-
-## Tier 1 — blocks a real deployment
-
-### 1. No authentication or authorisation
-The API listens on all interfaces with no login, no API key, no notion of *which
-adjuster*. Anyone who reaches it can create claims, **approve** them (the legally
-meaningful action), read every customer's memory, and wipe the knowledge base.
-The approval record even hardcodes *"approved by licensed adjuster"* — no name, no
-licence number.
-**Fix:** shared bearer token first (~2 h), then per-adjuster accounts so the
-approval carries a real identity (~half a day). Network boundary (Tailscale /
-Cloudflare Access) in front regardless.
-
-### 2. Customer memory is RAM-only
-`CustomerMemoryStore` always builds a LangGraph `InMemoryStore`. The resolution
-notes written on approval — filed under both the claimant and their company — are
-**lost on every restart / redeploy / crash**. The feature is meant to accumulate
-over time; it silently can't. It also only works with exactly one backend process.
-**Fix:** rebuild the index from `drafts WHERE status='accepted'` on startup (small,
-no new deps), or swap in a disk-backed store. The source data is safe on disk
-either way.
-
-### 3. SQLite write concurrency
-Background draft generation writes while API requests write. SQLite locks the whole
-file; there's no `busy_timeout`, no WAL mode, no retry — concurrent users will see
-random 500s. A check-then-insert in `create_or_get` can also race two new-customer
-requests into a `UNIQUE` violation.
-**Fix:** `PRAGMA busy_timeout` + WAL (~15 min); `INSERT OR IGNORE` then read
-(~15 min). Postgres for a real deployment.
-
-### 4. ~~The plan-lookup tool returns fabricated data~~ — FIXED (2026-09-03)
-`lookup_customer_plan` derived a "plan tier" and "SLA" from a hash of the email
-and handed it to the model as fact; the eval showed it leaking into 7/10 drafts.
-**Resolved:** deleted and replaced with `get_claim_sla` (real SLA constant from
-the KB) and `assess_claim_priority` (rule check against the FNOL escalation
-triggers). SLA standards are also now injected as fixed prompt context. See
-`docs/ITERATION_LOG.md` §1.5.
+This document is the honest gap between the two: what was deliberately left out,
+why it matters, and roughly what it would take to close. Nothing here is a
+surprise; every item was a conscious call for a portfolio build. The fixes that
+have already been made are in [`ITERATION_LOG.md`](ITERATION_LOG.md).
 
 ---
 
-## Tier 2 — will cause confusing bugs under load
+## 1. Measuring the AI — the core idea, and where it currently stops
 
-- **DB connections are never closed** — `with connect()` commits but doesn't close;
-  no pooling. Latent handle leak.
-- **`except Exception: pass`** around the memory save on approval — a broken memory
-  system fails completely silently. Log it.
-- **Frontend timeout < backend work** — Streamlit's draft call times out at 60 s;
-  a slower generation shows a false failure while the server finishes and saves.
-- **LLM rate limits — backoff added, not solved (2026-09-03).** A Groq `429`
-  used to leave `generate_draft` as a raw HTTP `500`. Now `ChatGroq` runs with
-  `max_retries=5` (SDK exponential backoff honouring `Retry-After`), and the
-  manual endpoint returns a clean `503` if retries are exhausted.
-  **The hard number (measured 2026-09-03):** the free tier is **8,000 tokens /
-  minute**. The old agentic draft — system prompt + KB context + 2-3 agent tool
-  rounds + final generation — was **~10-15k tokens in a ~10 s burst**, over budget
-  on its own. The agent→direct-call refactor (ITERATION_LOG §1.11) cut a draft to
-  **~4k tokens / ~6 s**, so a draft now fits one minute's budget from a cold
-  start — but a full 14-claim eval run still exhausts the day's headroom and then
-  throttles hard, and `max_retries` does not rescue it (the SDK sees a ~60 s
-  Retry-After and gives up). The real fix is a request queue that paces calls
-  under the TPM limit, or a paid tier. Retry is the floor, not the ceiling.
+**What's there.** Every change to this system was driven by an evaluation
+harness: a hand-labelled set of test claims (including the hard cases — suspected
+fraud, a claim too vague to assess, a manipulative submission), automated rule
+checks, and an AI judge that scores each draft on whether it stays grounded in
+real policy facts, picks the right coverage, and never oversteps into a binding
+decision. Across a documented series of fixes, the "stays grounded" score moved
+from **1.1 to 1.7 out of 2**, and two classes of claim are now refused before the
+model runs at all.
 
-### Findings from the evaluation (see `docs/ITERATION_LOG.md` §1.4)
+**The gap.**
 
-- **Groundedness** — the model fabricates SLA/timeline figures and process
-  details absent from retrieved context. Fixes: always inject a curated SLA
-  snippet into the prompt (it's needed for every draft but rarely retrieved);
-  add a prompt rule forbidding unsourced specific numbers.
-- **Stub-tool contamination** — `lookup_customer_plan`'s fabricated plan/SLA
-  data appears in most drafts as fact (this is Tier-1 item 4, now with evidence).
-- **Insufficient-information handling** — ~~the model requests missing fields but
-  still commits to a coverage guess~~ FIXED (2026-09-03): a deterministic intake
-  gate (`intake_check.py`) returns a fixed reply for claims with no impact
-  detail; the model never runs. Also neutralises pure-injection inputs.
+- **Only the first draft is measured.** The copilot now drafts at four points in
+  a claim's life (the initial request for documents, the follow-up chases, the
+  coverage recommendation, the closing notice). Only the first is in the harness.
+  The other three are built to the same rules and verified to work, but "are they
+  *reliably* good?" is an open question. **~half a day** to extend the harness
+  once the AI service quota allows repeated runs.
+- **The adjuster's edits are thrown away.** When an adjuster edits a draft before
+  approving it, the difference between what the AI wrote and what a human was
+  willing to sign is the single most valuable signal for improving the system.
+  Today the AI's original text is overwritten and that signal is lost. **~half a
+  day** to start capturing it; a feedback loop that actually uses it is a larger
+  piece of work.
 
 ---
 
-## Tier 3 — rough edges
+## 2. Trust, governance, and regulatory readiness
 
-- **Chroma collection name flips with the Gemini key** (`support_kb_gemini` vs
-  `support_kb`). Toggle the key and the ingested KB appears to vanish.
-- **`GET /api/drafts/{ticket_id}` vs `PATCH /api/drafts/{draft_id}`** — same path,
-  different ID meaning.
-- **Re-accepting a draft at the API is not idempotent** — the UI hides the
-  approve button once a draft is `accepted`, and `close` is now guarded (a second
-  call returns 409), but a direct `PATCH` re-accepting a draft still re-runs its
-  side effects (re-seeds the checklist / re-logs a "sent" row / re-advances the
-  stage). Needs an already-accepted guard in `update_draft_route`. The memory
-  double-write is gone — memory is only written by `close`, not by acceptance.
-- **Dead config** — `openai_api_key`, `dashboard_api_url`, `enable_local_embeddings`,
-  `chroma_mem0_dir` are defined and used nowhere.
-- **`/health` is static** — checks nothing (DB, Chroma, model reachability).
-- **Prompt injection** — the claimant's `description` goes verbatim into the LLM
-  prompt. Human-in-the-loop is the only mitigation today.
+The largest gap for anything a regulated business would run.
 
----
-
-## Claim workflow — built end to end (Phases 2–3), gaps remain
-
-The two-state "registered → resolved" model is gone. A claim now runs FNOL to
-closure: a real lifecycle (`intake → awaiting_documents → review_ready →
-settlement → closed`), a per-claim documents checklist, a correspondence log,
-four kinds of draft, and an adjuster-recorded coverage decision + settlement
-steps. The customer-history memory is written at closure from the real outcome
-(approved / denied), not from the preliminary recommendation. What is still
-missing:
-
-- **No email integration.** "Send to claimant" is manual — an approved draft is
-  logged as sent and the adjuster records the reply by hand. Real outbound email
-  (and inbound capture) is a separate build and deliberately out of scope for a
-  portfolio project.
-- **The Phase 2/3 drafts are unevaluated.** `followup_request`,
-  `coverage_recommendation` and `closure_notice` have no labelled eval cases and
-  no judge pass yet — they lean entirely on the human review every draft gets.
-  ~half a day to close once the Groq quota allows repeated runs.
-- **Checklist seeding keys off the claimant-stated claim type**, not the coverage
-  the adjuster actually determines. The adjuster can add/waive items, but a
-  mis-stated type produces a slightly wrong starting list.
-- **Stage transitions are not audited.** `lifecycle_stage`, `coverage_decision`
-  and the settlement steps are overwritten in place; there is no history of when
-  a claim moved or who moved it. A regulated system would need an append-only
-  audit trail with the acting adjuster's identity (which also needs auth —
-  Tier 1 item 1).
+- **No user identity or access control.** Anyone who can reach the system can act
+  on claims — including approving a coverage decision, which is the legally
+  meaningful step. The approval is recorded as "approved by a licensed adjuster"
+  with no actual name or licence number behind it.
+  → *Basic shared login: hours. Per-adjuster accounts so each decision carries a
+  real identity: ~1 day.*
+- **No audit trail.** Stage changes and decisions are overwritten in place. There
+  is no immutable, time-stamped record of who did what — which a regulator, an
+  auditor, or a disputed claim would require.
+  → *Append-only event log tied to adjuster identity: ~1–2 days (needs the
+  identity work above first).*
+- **Claimant input goes straight to the model.** The mandatory human review is
+  the only thing between a manipulative submission and a bad draft. Acceptable
+  for a prototype with a person in the loop; a production system needs input
+  screening and monitoring.
 
 ---
 
-## Explicitly out of scope for this project
+## 3. Reliability and scale
 
-Full auth stack, Postgres migration, prompt-injection hardening, rate limiting,
-multi-tenancy, real claimant email/portal. Called out here so the boundary is a
-decision, not an oversight.
+Built to be run by one person, on one machine.
+
+- **Single-file database.** Fine for a demo; several adjusters working at once
+  would hit lock errors and intermittent failures. → *Move to a proper database
+  (Postgres) for production.*
+- **Customer memory is held in memory and lost on restart.** The feature is meant
+  to accumulate a customer's history over time; today it silently resets.
+  → *Persistent store: ~half a day.*
+- **The AI service has a hard rate limit on the free tier.** A single draft can
+  exceed the per-minute budget; the system retries but cannot always recover.
+  → *A paid tier, or a request queue that paces calls under the limit.*
+
+---
+
+## 4. Capability gaps vs. a commercial claims platform
+
+Benchmarked against three products in this space —
+[Shift Technology](https://shift-technology.com/products/claims-document-decisions),
+[Five Sigma (Clive)](https://fivesigmalabs.com/), and
+[Lorikeet](https://www.lorikeetcx.ai/articles/best-ai-insurance-claims-fnol-2026).
+All three share this prototype's core principle: **the AI assists and drafts, the
+human decides coverage.** Lorikeet makes the same architectural choice this
+project did — the fact-gathering / coverage-decision boundary is built into the
+system, not left to a prompt instruction — and calls it "the single clearest
+reason regulated carriers shortlist the platform."
+
+Where a funded product with a team behind it goes further:
+
+| Capability | This prototype | A commercial platform |
+|---|---|---|
+| Fraud / urgency detection | Rule-based pattern matching — flag or no flag | Trained models on real claims data, with risk scoring |
+| Reading documents | Takes typed text only | Extracts data from police reports, photos, and PDFs |
+| Coverage rules | Fixed for one set of policies | Configurable per carrier |
+| Claimant contact | None — adjuster-facing only | One continuous conversation across phone, chat, email, SMS |
+| Integration | Standalone application | Embeds into core claims systems (e.g. Guidewire, Duck Creek) |
+| Knowledge base | 5 synthetic policy documents | Real carrier policy and procedure libraries |
+
+None of these are oversights. They are the distance between a two-phase portfolio
+build and a product with funding and a roadmap.
+
+---
+
+## 5. Deliberately out of scope
+
+Named so the boundary reads as a decision, not a blind spot: a full
+authentication stack, migrating the database to Postgres, hardening against
+manipulative input, rate-limit engineering, multi-carrier configuration, a
+claimant-facing channel, document extraction (OCR), and a model-retraining
+pipeline.
+
+---
+
+## Smaller engineering notes (for a technical reviewer)
+
+- Re-sending the same "approve" request runs its side effects twice — the UI
+  prevents it, the close action is guarded, but the API is not fully idempotent.
+- A few configuration values are defined but unused; the health check does not
+  actually verify the database or the AI services are reachable.
+- The knowledge-base collection name changes with the embedding provider, so
+  toggling the optional Gemini key can make an already-loaded knowledge base
+  appear empty until it is re-indexed.
+- Database connections are committed but not explicitly closed (no pooling).

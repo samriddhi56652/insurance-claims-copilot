@@ -98,7 +98,7 @@ What this is designed to enable:
 | **RAG done deliberately** | Curated single-domain corpus; a document needed on *every* draft is injected as fixed context rather than left to similarity search; retrieval quality is measured, not assumed. |
 | **Agent → direct calls** | Started with an LLM agent choosing tools. Measured that the tools apply to *every* claim and the model never really chose — replaced the agent with a single generation call. **~4× fewer tokens, ~5× faster, same grounding.** |
 | **Deterministic guardrail** | The eval proved a prompt rule can't stop the model guessing on vague input. A hard pre-check now blocks under-described claims (and prompt-injection attempts) before they reach the model. |
-| **Honest about its gaps** | [`docs/DESIGN_GAPS.md`](docs/DESIGN_GAPS.md) — a catalogue of architectural gaps across three tiers (auth, persistence, concurrency, rate limits), each with a fix and a rough cost, most deliberately left as "next steps". |
+| **Honest about its gaps** | [`docs/DESIGN_GAPS.md`](docs/DESIGN_GAPS.md) — the gap between this prototype and production, by theme (measurement, governance, scale, capability vs. commercial platforms), each with why it matters and a rough cost. |
 
 ---
 
@@ -251,16 +251,20 @@ Set in `.env` (see `.env.example`):
 
 ## Known limitations
 
-This is a portfolio project, not production. The main gaps (full list in
-[`docs/DESIGN_GAPS.md`](docs/DESIGN_GAPS.md)):
+This is a portfolio prototype, not production. The main gaps — full breakdown by
+theme, with why each matters and a rough cost, in
+[`docs/DESIGN_GAPS.md`](docs/DESIGN_GAPS.md):
 
-- **No authentication** — anyone who can reach the API can act on claims.
-- **Customer memory is RAM-only** — resolution history is lost on restart.
-- **SQLite** — fine for a demo; would not hold up under concurrent adjusters.
-- **Rate limits** — on Groq's free tier, one draft can exceed the per-minute
-  token budget; retry converts this to latency, not a fix. A paid tier or a
-  request queue is the real answer.
-- The knowledge base is 5 synthetic documents, not a real policy system.
+- **Only the intake draft is in the evaluation harness** — the three later drafts
+  are built to the same rules and verified to work, but not yet measured.
+- **No authentication or audit trail** — anyone who can reach the API can act on
+  claims, and decisions are overwritten in place with no record of who made them.
+- **Customer memory is RAM-only** — a customer's history is lost on restart.
+- **SQLite + free-tier rate limits** — fine for one user; neither holds up under
+  concurrent adjusters or real volume.
+- **No document extraction, no fraud model, single set of policies** — the AI
+  takes typed text, flags urgency with rules not a model, and reads 5 synthetic
+  documents rather than a real carrier policy library.
 
 ---
 
