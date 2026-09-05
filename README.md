@@ -155,8 +155,9 @@ flowchart TD
   editable draft, the documents checklist, the correspondence log, and a "Context
   used" panel showing every document and signal the draft drew on.
 - **Storage** — SQLite (claims, drafts, checklist, correspondence — on disk),
-  Chroma (knowledge-base vectors, on disk), an in-memory store for per-customer
-  resolution memory *(RAM-only — a known gap)*.
+  Chroma (knowledge-base vectors, on disk), an in-memory index for per-customer
+  history that's *automatically rebuilt from SQLite on every restart* — a
+  redeploy or a crash costs a few seconds, not the history.
 - **Models** — Groq `openai/gpt-oss-20b` (drafts), `openai/gpt-oss-120b` (eval
   judge), Google `gemini-embedding-001` (embeddings).
 
@@ -263,7 +264,9 @@ theme, with why each matters and a rough cost, in
   are built to the same rules and verified to work, but not yet measured.
 - **No authentication or audit trail** — anyone who can reach the API can act on
   claims, and decisions are overwritten in place with no record of who made them.
-- **Customer memory is RAM-only** — a customer's history is lost on restart.
+- **Customer memory runs in RAM, rebuilt from disk on every restart** — the
+  search index itself isn't persistent, but the claims it's built from are, so a
+  restart no longer loses a customer's history (it costs a few seconds instead).
 - **SQLite + free-tier rate limits** — fine for one user; neither holds up under
   concurrent adjusters or real volume.
 - **No document extraction, no fraud model, single set of policies** — the AI

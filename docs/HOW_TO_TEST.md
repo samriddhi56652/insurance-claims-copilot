@@ -177,12 +177,13 @@ To test just the intake draft (as the eval does), stop after step 2.
 - **Discard / Request Info** -> sets the draft aside, no structural change.
 
 **Close Claim** (settlement stage) -> sets the outcome, stage -> closed, and
-writes the customer-history memory from the real decision (RAM-only — see design
-gaps).
+writes the customer-history memory from the real decision. That memory index is
+runtime RAM, but it's rebuilt automatically from every closed claim on each
+server restart — closing the app doesn't lose the history.
 
 **Claim History Probe** — type a query, hit the button. Returns past *closed*
 claims for this customer / their company, with the adjuster's outcome. Empty
-until you close some (and after any server restart).
+until you close some.
 
 ### Red flags to note while testing
 

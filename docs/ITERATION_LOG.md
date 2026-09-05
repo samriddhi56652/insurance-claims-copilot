@@ -599,3 +599,29 @@ independent AI judge scoring every case. Wiring the three later drafts into that
 harness — a few labelled test claims plus one addition to the judge's rubric — is
 the next piece of work, roughly half a day. Until then, every draft still goes
 through a human adjuster before it reaches a claimant.
+
+### 3.8 — A restart no longer erases the customer's history
+Found this the direct way: closed my laptop, reopened the app, and a customer
+who'd had three claims with us showed up as a stranger again. Not a surprise —
+it's exactly the documented gap (customer memory lives only in the running
+process's RAM) — but a live demo shouldn't hit it.
+
+The fix is the one already written down as the alternative to a full persistent
+store: **rebuild the memory from SQLite every time the app starts.** On startup,
+the app now reads every claim already marked `closed` and replays its outcome
+back through the exact same code path a real closure uses — same function, same
+memory text, byte for byte. No AI model call is involved; it's a few database
+reads and a re-write into memory.
+
+**A bug on the first attempt:** my first version built a brand-new, throwaway
+copy of the copilot just to do the replay, so the memory landed in a store
+nobody ever reads from again - the real one, that answers actual requests, still
+came up empty. Fixed by rebuilding into the exact same shared instance the API
+serves from. Verified by restarting the whole app and confirming a customer's
+three prior claims all came back.
+
+**What this does and doesn't fix:** a restart (redeploy, crash, closing the
+laptop) no longer loses a customer's history - it costs a few seconds at startup
+instead. It's still not a true persistent index, and the cost grows with how
+many claims are closed; at real volume that would need a proper persistent
+store. For this project's scale, the practical problem is solved.

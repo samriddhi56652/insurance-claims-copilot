@@ -174,14 +174,19 @@ durability:
 |---|---|---|
 | SQLite `data/support.db` | customers, tickets, drafts, the requirements checklist, the correspondence log (incl. the `context_used` JSON) | **Yes** — file on disk |
 | Chroma `data/chroma_rag/` | knowledge-base chunk vectors | **Yes** — `PersistentClient` |
-| langmem `InMemoryStore` | per-customer claim-closure memories | **No** — RAM only, gone on restart |
+| langmem `InMemoryStore` | per-customer claim-closure memories | **Rebuilt on every start** — the index itself is RAM, but it's replayed from SQLite automatically (see below) |
 
 So a closed claim is *recorded twice*: permanently on the `tickets` row
 (`outcome`, `coverage_decision`, `closed_at`) and as a `drafts` history, and
-ephemerally as a searchable "memory" that lives only for the current server
-process. Swapping `InMemoryStore` for a persistent LangGraph store (or rebuilding
-the index from closed claims on startup) is the one change needed to make memory
-durable.
+as a searchable "memory" in the langmem index. That index only lives for the
+current process — but on every startup, `_rebuild_customer_memory`
+(`app_factory.py`) reads every claim already `closed` and replays its outcome
+back through the same `SupportCopilot.save_claim_closure` path a real closure
+uses, into the *same* cached `get_copilot()` instance the API serves from. So a
+restart (a redeploy, a crash, closing the laptop) no longer loses a customer's
+history — it costs a few seconds at startup instead. Swapping the index for a
+genuinely persistent store is still the more scalable fix, but the practical gap
+is closed for this project's scale.
 
 ---
 

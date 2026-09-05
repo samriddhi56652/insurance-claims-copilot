@@ -70,9 +70,14 @@ Built to be run by one person, on one machine.
 - **Single-file database.** Fine for a demo; several adjusters working at once
   would hit lock errors and intermittent failures. → *Move to a proper database
   (Postgres) for production.*
-- **Customer memory is held in memory and lost on restart.** The feature is meant
-  to accumulate a customer's history over time; today it silently resets.
-  → *Persistent store: ~half a day.*
+- **Customer memory runs in RAM, rebuilt from disk on every start.** The search
+  index itself is not persistent — but the claims it's built from are (SQLite),
+  so on every restart the system replays every closed claim back into memory
+  automatically. In practice this means a restart no longer loses a customer's
+  history. What's still missing: the rebuild cost grows with the number of
+  closed claims (fine at this scale, would need a real persistent index at
+  volume), and it only knows about *closed-claim* memories — there's no other
+  memory type yet to lose.
 - **The AI service has a hard rate limit on the free tier.** A single draft can
   exceed the per-minute budget; the system retries but cannot always recover.
   → *A paid tier, or a request queue that paces calls under the limit.*

@@ -48,6 +48,71 @@ def _ensure_knowledge_base(settings: Settings) -> None:
         )
 
 
+def _rebuild_customer_memory(settings: Settings) -> None:
+    """Replay closed claims from SQLite back into the customer-history memory.
+
+    The memory store (langmem) lives only in this process's RAM, so a restart
+    - a redeploy, a crash, or just closing the laptop - loses it, even though
+    the claims themselves are safe on disk. This rebuilds it from the claims
+    already marked `closed`, using the same deterministic write path a real
+    closure uses (SupportCopilot.save_claim_closure), so the rebuilt memory
+    text is identical to what was originally written. No LLM call is made for
+    the rebuild itself. Runs once per process start; best-effort.
+
+    Important: this must write into the *same* SupportCopilot instance the API
+    routes read from (api.dependencies.get_copilot(), @lru_cache'd) - not a
+    second, throwaway one with its own empty memory store.
+    """
+    try:
+        from customer_support_agent.api.dependencies import get_copilot
+        from customer_support_agent.repositories.sqlite.drafts import DraftsRepository
+        from customer_support_agent.repositories.sqlite.tickets import TicketsRepository
+        from customer_support_agent.services.draft_service import DraftService
+
+        tickets_repo = TicketsRepository()
+        closed = [
+            t for t in tickets_repo.list(limit=1000)
+            if (t.get("lifecycle_stage") or "") == "closed"
+        ]
+        if not closed:
+            return
+
+        drafts_repo = DraftsRepository()
+        draft_service = DraftService()
+        copilot = get_copilot()  # constructs (and caches) the real singleton
+
+        restored = 0
+        for ticket in closed:
+            try:
+                cov = drafts_repo.latest_of_kind(ticket["id"], "coverage_recommendation")
+                context_used = draft_service.parse_context_used(
+                    (cov or {}).get("context_used")
+                )
+                copilot.save_claim_closure(
+                    customer_email=ticket["customer_email"],
+                    customer_company=ticket.get("customer_company"),
+                    ticket=ticket,
+                    coverage_rec_text=(cov or {}).get("content", ""),
+                    context_used=context_used,
+                )
+                restored += 1
+            except Exception:
+                logger.warning(
+                    "Memory rebuild failed for ticket_id=%s", ticket.get("id"),
+                    exc_info=True,
+                )
+        if restored:
+            logger.info(
+                "Customer-history memory rebuilt from %s closed claim(s).", restored
+            )
+    except Exception:
+        logger.warning(
+            "Customer-history memory rebuild skipped (e.g. no GROQ_API_KEY yet). "
+            "Reason:",
+            exc_info=True,
+        )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     resolved_settings = settings or get_settings()
 
@@ -56,6 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ensure_directories(resolved_settings)
         init_db()
         _ensure_knowledge_base(resolved_settings)
+        _rebuild_customer_memory(resolved_settings)
         yield
 
     app = FastAPI(title=resolved_settings.app_name, lifespan=lifespan)
