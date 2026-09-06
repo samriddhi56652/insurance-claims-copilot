@@ -88,6 +88,14 @@ What this is designed to enable:
 - Touch payments
 - Talk to the claimant directly — it is an adjuster's tool
 
+### See it on one claim
+
+[`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) follows a single claim — a repeat
+customer's fourth, where he backs into a neighbour's fence — through all five
+stages, showing the system's actual output at each step: the history that
+resurfaces before the first draft, the auto-seeded checklist, the coverage
+recommendation that lands on Liability, and the human-only settlement screen.
+
 ---
 
 ## Why this project is interesting (engineering)
@@ -236,7 +244,8 @@ app.py                      Streamlit dashboard
 main.py                     API entrypoint
 evals/                      test set, metrics, judge, runner
 tests/                      unit tests (pytest)
-docs/                       ITERATION_LOG, DESIGN_GAPS, HOW_TO_TEST, architecture
+docs/                       ITERATION_LOG, DESIGN_GAPS, HOW_TO_TEST, architecture,
+                            WALKTHROUGH (one claim, stage by stage)
 knowledge_base/             the 5 policy / procedure documents
 ```
 

@@ -625,3 +625,28 @@ laptop) no longer loses a customer's history - it costs a few seconds at startup
 instead. It's still not a true persistent index, and the cost grows with how
 many claims are closed; at real volume that would need a proper persistent
 store. For this project's scale, the practical problem is solved.
+
+### 3.9 — A plain-language walkthrough of one whole claim
+**What:** added `docs/WALKTHROUGH.md` — one claim followed end to end, stage by
+stage, with the system's *actual* output quoted at each step (not a mock-up).
+
+The claim is deliberately chosen: **Jordan Blake's fourth**. His first three
+claims are closed and on file; this one is a Property Damage claim (he backs into
+a neighbour's fence, his own car untouched) — the one coverage branch —
+**Liability (Property Damage)** — that his earlier three never exercised. So the
+one document shows both things that make this project more than a prompt: the
+customer history resurfacing automatically before the first draft (3 prior
+claims), and the coverage classifier landing on Liability and saying why
+Collision and Comprehensive don't apply.
+
+The incident date (12 Aug 2026) is set earlier than two of his prior claims on
+purpose — it demonstrates that history is ordered by when a claim was *filed and
+closed*, not by incident date.
+
+**Why:** the recruiter this is aimed at asked for the repo and the docs, not a
+video. A reviewer needs a way to see what the system *does* in three minutes
+without standing up Docker and a Groq key. The existing docs explain the
+architecture, the evaluation, and the gaps — none of them just walk one claim.
+
+**Impact:** documentation only, no code changed. Linked from the README ("See it
+on one claim") and listed in the project layout.
