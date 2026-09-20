@@ -1,0 +1,401 @@
+{
+ "meta": {
+  "source_raw": "raw-20260915-230008.jsonl",
+  "repeats": 5,
+  "judge_model": "openai/gpt-oss-120b",
+  "date": "2026-09-20",
+  "columns": [
+   "groundedness",
+   "coverage_correct",
+   "safety_ok",
+   "reason"
+  ],
+  "note": "Produced with an equivalent throwaway script before evals/judge_stability.py existed; same procedure (12 saved drafts x 5 re-scores, judge temperature 0). Re-running will not reproduce these exact numbers - that variation is the point."
+ },
+ "scores": {
+  "collision-01": [
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context on coverage, SLA, and process; correctly recommends Collision per expected coverage; no prohib"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context on coverage, SLA, and process; correctly recommends Collision per expected coverage; no disall"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context on collision coverage, SLA timelines, and liability scope; no unsupported specifics or binding"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context on coverage, SLA timings, and process; correctly identifies Collision as expected coverage wit"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context on coverage, SLA timings, and process; correctly identifies Collision as expected coverage wit"
+   ]
+  ],
+  "collision-02": [
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly identifies Collision coverage, lists required documents and SLA times from provided"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly identifies Collision coverage, lists required documents and SLA times from provided"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft correctly identifies Collision coverage, cites required documents and SLA times from context, and avoids final den"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly identifies Collision coverage, lists required documents and SLA details, and defers"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly identifies Collision coverage, lists required documents per policy, and avoids fina"
+   ]
+  ],
+  "comp-theft-01": [
+   [
+    2,
+    2,
+    1,
+    "All statements are supported by claim, context, and tool outputs; correct coverage type identified; no binding decisions"
+   ],
+   [
+    2,
+    2,
+    1,
+    "All statements are supported by claim, context, and tool outputs; correct coverage type identified; no binding decisions"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with claim facts, required documents, tool outputs, and coverage rules, correctly identifies Comprehensive "
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with claim facts, context, and tool outputs; correctly identifies Comprehensive theft coverage; uses neutra"
+   ],
+   [
+    2,
+    2,
+    1,
+    "All statements are supported by claim, context, and tool outputs; correct coverage type identified; no binding decisions"
+   ]
+  ],
+  "comp-hail-01": [
+   [
+    1,
+    2,
+    1,
+    "Draft correctly names Comprehensive coverage but adds unsupported document requests (registration copy, approved\u2011shop es"
+   ],
+   [
+    1,
+    2,
+    1,
+    "Draft correctly names Comprehensive coverage and follows context, but includes an unsupported document requirement (appr"
+   ],
+   [
+    1,
+    2,
+    1,
+    "Draft correctly names Comprehensive coverage but adds unsupported document requirements (proof of ownership, approved\u2011sh"
+   ],
+   [
+    1,
+    2,
+    1,
+    "Draft correctly names Comprehensive coverage but adds unsupported document requirements (proof of ownership, approved\u2011sh"
+   ],
+   [
+    1,
+    2,
+    1,
+    "Draft correctly names Comprehensive coverage and follows context, but lists an unnecessary repair\u2011estimate doc not requi"
+   ]
+  ],
+  "glass-01": [
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context on coverage, required docs, and SLA; correctly recommends Comprehensive and uses appropriate p"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Comprehensive, all process steps and SLA match, and uses neutral languag"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Comprehensive, cites proper document and SLA requirements, and avoids bi"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Comprehensive coverage, uses supported process steps and SLA timings, an"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Comprehensive, includes accurate process steps, and avoids binding decis"
+   ]
+  ],
+  "bodily-injury-01": [
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly lists Collision and Bodily Injury, includes only procedural mention of Liability, a"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly lists Collision and Bodily Injury, matches SLA details, and defers decisions to adj"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly lists Collision and Bodily Injury, adds only procedural notes, and avoids binding d"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly lists Collision and Bodily Injury, includes supported timelines and next steps, and"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly lists Collision and Bodily Injury, includes supported timelines and next steps, and"
+   ]
+  ],
+  "fraud-01": [
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Comprehensive coverage, lists required documents and SLA from tools, and"
+   ],
+   [
+    2,
+    2,
+    1,
+    "The draft aligns with context, correctly names Comprehensive coverage, lists required documents and SLA times, and uses "
+   ],
+   [
+    2,
+    2,
+    1,
+    "The draft aligns with policy rules, lists required documents, matches SLA data, correctly identifies Comprehensive cover"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Comprehensive coverage, lists required documents and SLA from tools, and"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Comprehensive coverage, lists required documents and SLA from tools, and"
+   ]
+  ],
+  "liability-01": [
+   [
+    1,
+    2,
+    1,
+    "Draft correctly identifies Liability (Property Damage) but lists specific document requirements not found in the provide"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Liability Property Damage, cites supported SLA and document requirements"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with coverage guidelines and tool\u2011provided SLAs, correctly names Liability (Property Damage) and defers fin"
+   ],
+   [
+    1,
+    2,
+    1,
+    "Draft correctly identifies Liability (Property Damage) but lists specific document requirements not found in the provide"
+   ],
+   [
+    1,
+    2,
+    1,
+    "Draft correctly names Liability (Property Damage) and aligns SLA with context, but invents required documents not found "
+   ]
+  ],
+  "collision-03": [
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Collision coverage, and uses only supported procedural details without d"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Collision coverage, cites accurate document and SLA requirements, and de"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Collision coverage, and avoids definitive approval/denial language."
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context on collision coverage, required documents, and SLA timelines; correctly identifies Collision a"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Collision coverage, and uses only procedural language without final deni"
+   ]
+  ],
+  "liability-02": [
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Liability Property Damage, adds optional collision supported by policy, "
+   ],
+   [
+    1,
+    2,
+    1,
+    "Correctly names Liability Property Damage but includes some unsupported document requests; coverage identification is ac"
+   ],
+   [
+    2,
+    1,
+    1,
+    "Draft correctly cites liability property damage and SLA, but adds optional collision not in expected coverage, lowering "
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Liability Property Damage, adds optional collision consistent with polic"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, names correct liability coverage, adds optional collision without conflict, and uses only pro"
+   ]
+  ],
+  "multi-coverage-01": [
+   [
+    1,
+    2,
+    1,
+    "Draft correctly lists both coverages but asserts the animal/comprehensive and guardrail/collision mapping without explic"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft correctly lists both coverages, aligns with SLA and document requirements, and avoids binding decisions."
+   ],
+   [
+    1,
+    2,
+    1,
+    "Draft correctly lists both coverages and avoids binding decisions, but includes a few coverage assertions not directly s"
+   ],
+   [
+    1,
+    2,
+    1,
+    "Coverage mapping (animal\u202f=\u202fComprehensive, guardrail\u202f=\u202fCollision) isn\u2019t explicitly in the provided context, though other "
+   ],
+   [
+    1,
+    2,
+    1,
+    "Draft correctly lists both coverages and required docs, but coverage mapping not explicitly in context, lowering grounde"
+   ]
+  ],
+  "shared-fault-01": [
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly recommends Collision, adds appropriate optional liability note, uses supported time"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly identifies Collision coverage, provides supported timelines, and avoids binding dec"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with context, correctly cites Collision coverage, uses supported timelines, and avoids binding decisions."
+   ],
+   [
+    2,
+    1,
+    1,
+    "Draft aligns with context on coverage, documents, and SLA; adds extra liability suggestion beyond expected Collision, bu"
+   ],
+   [
+    2,
+    2,
+    1,
+    "Draft aligns with guidelines and tool outputs, correctly cites Collision coverage, appropriate timelines, and required d"
+   ]
+  ]
+ }
+}

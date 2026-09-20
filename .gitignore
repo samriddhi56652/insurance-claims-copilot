@@ -21,3 +21,18 @@ evals/results/*
 !evals/results/summary-20260903-095739.md
 !evals/results/summary-20260903-100140.md
 !evals/results/summary-20260903-180818.md
+# Phase 4: the five runs (two before / three after the retrieval fix) behind
+# docs/EVAL_NOISE.md, plus the judge re-scoring test - see evals/results/README.md
+!evals/results/summary-20260911-155544.md
+!evals/results/summary-20260911-161501.md
+!evals/results/summary-20260915-174658.md
+!evals/results/summary-20260915-180437.md
+!evals/results/summary-20260915-230008.md
+!evals/results/scored-20260911-155544.jsonl
+!evals/results/scored-20260911-161501.jsonl
+!evals/results/scored-20260915-174658.jsonl
+!evals/results/scored-20260915-180437.jsonl
+!evals/results/scored-20260915-230008.jsonl
+!evals/results/raw-20260911-155544.jsonl
+!evals/results/raw-20260915-230008.jsonl
+!evals/results/judge-stability-20260915-230008.json
