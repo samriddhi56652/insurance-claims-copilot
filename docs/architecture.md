@@ -227,7 +227,11 @@ flowchart TD
    namespaces — the customer's email *and* a `company::<slug>` scope — then
    de-dupes.
 3. **Knowledge retrieval.** `rag.search(query, top_k)` embeds the ticket text
-   (Gemini) and pulls the nearest knowledge-base chunks from Chroma.
+   (Gemini) and pulls the 16 nearest knowledge-base chunks from Chroma, then keeps
+   `top_k` (4): the best chunk from each *different* document first, then the
+   next-nearest to fill any remaining slots. A plain top-4 let pairs of chunks from
+   two or three files crowd out a file the claim needed (recall 0.85 → 1.0 after
+   the change; ITERATION_LOG §4.1).
 4. **Signal checks.** `_run_signal_tools` calls three deterministic functions
    directly — no agent, no LLM: `get_claim_sla` (the fixed settlement timeline),
    `assess_claim_priority` (a regex check of the claim text against the FNOL

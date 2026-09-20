@@ -38,6 +38,18 @@ model runs at all.
   Today the AI's original text is overwritten and that signal is lost. **~half a
   day** to start capturing it; a feedback loop that actually uses it is a larger
   piece of work.
+- **The scores are noisy and the test set is small.** The same code scored 1.42
+  and then 1.67 on groundedness. Both the drafting model and the judge vary from
+  run to run, and only 12 claims are scored, so a before/after gap needs several
+  runs and a spread to be believed (see [`EVAL_NOISE.md`](EVAL_NOISE.md)). More
+  claims, especially borderline ones, would help most — **a day or two** to write
+  and label a few dozen. Also, the AI judge has only been spot-checked against a
+  human's reading, not systematically compared with a human adjuster's scores.
+- **The business benefit is not measured.** Draft time is measured (about 3
+  seconds), but how much adjuster time or cost the copilot saves has not been —
+  the speed and consistency benefits are what the design is meant to enable. A
+  real answer needs a side-by-side with adjusters on real claims, which this
+  prototype has not had.
 
 ---
 

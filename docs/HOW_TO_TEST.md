@@ -52,6 +52,20 @@ Outputs land in `evals/results/`:
 | `scored-<ts>.jsonl` | every metric per claim |
 | `summary-<ts>.md` | the aggregate table + per-claim table + judge reasoning |
 
+### One run is not a result
+
+The drafting model and the judge both vary from run to run, so the same code can
+score 1.42 on one run and 1.67 on the next. Before believing a before/after gap,
+run each version several times and compare with a spread:
+
+```bash
+python evals/analyze_runs.py --before <tag> <tag> --after <tag> <tag> <tag>
+python evals/judge_stability.py --raw <tag>     # re-score saved drafts to isolate the judge
+```
+
+`<tag>` is the timestamp in a results file name (`scored-<tag>.jsonl`). Background
+and numbers: [`EVAL_NOISE.md`](EVAL_NOISE.md).
+
 ### How to read the scores
 
 | Metric | Source | Good | What a bad value means |

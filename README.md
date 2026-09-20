@@ -72,11 +72,12 @@ closure — never making the decision. It:
 
 The adjuster reviews, edits, and approves each draft; ticks the checklist as
 documents arrive; and makes the coverage call. The blank-page work is gone.
-What this is designed to enable:
+What this is designed to enable (the design intent — the draft time is measured, but
+how much adjuster time this actually saves has **not** been measured yet):
 
 | | |
 |---|---|
-| **Speed** | first response in seconds — helps hold SLA during volume spikes |
+| **Speed** | first response in seconds (a draft takes about 3 s, median, in the evals) — helps hold SLA during volume spikes |
 | **Consistency** | same claim → same answer, across adjusters *and* across a customer's history |
 | **Faster ramp** | a new adjuster produces a competent, on-policy first draft on day one — reviewing, not memorising the manual |
 | **Screening on every claim** | urgent and fraud signals caught automatically, not only when someone looks |
@@ -102,8 +103,8 @@ recommendation that lands on Liability, and the human-only settlement screen.
 
 | | |
 |---|---|
-| **Evaluation harness, not vibes** | A labelled test set, rule-based checks + an LLM-as-judge (a *larger* model than the generator), and a documented series of iterations with measured deltas. Groundedness moved **1.11 → 1.71 / 2** across the fixes. |
-| **RAG done deliberately** | Curated single-domain corpus; a document needed on *every* draft is injected as fixed context rather than left to similarity search; retrieval quality is measured, not assumed. |
+| **Evaluation harness, not vibes** | A labelled test set, rule-based checks + an LLM-as-judge (a *larger* model than the generator), and a documented series of iterations with measured deltas. Groundedness moved **1.11 → 1.71 / 2** across the fixes. Scores also move between runs on identical code, so before/after comparisons use several runs with a spread ([`docs/EVAL_NOISE.md`](docs/EVAL_NOISE.md)). |
+| **RAG done deliberately** | Curated single-domain corpus; a document needed on *every* draft is injected as fixed context rather than left to similarity search; retrieval quality is measured, not assumed — and when the measurement showed the search missing a needed document on 5 claims, the fix took recall from 0.85 to 1.0. |
 | **Agent → direct calls** | Started with an LLM agent choosing tools. Measured that the tools apply to *every* claim and the model never really chose — replaced the agent with a single generation call. **~4× fewer tokens, ~5× faster, same grounding.** |
 | **Deterministic guardrail** | The eval proved a prompt rule can't stop the model guessing on vague input. A hard pre-check now blocks under-described claims (and prompt-injection attempts) before they reach the model. |
 | **Honest about its gaps** | [`docs/DESIGN_GAPS.md`](docs/DESIGN_GAPS.md) — the gap between this prototype and production, by theme (measurement, governance, scale, capability vs. commercial platforms), each with why it matters and a rough cost. |
@@ -220,6 +221,13 @@ Headline movement over the iteration series:
 \* the dip is mostly over-strict answer labels; see the log. Test manual:
 [`docs/HOW_TO_TEST.md`](docs/HOW_TO_TEST.md).
 
+**Reading the numbers.** A single run is not a reliable figure: the same code scored
+1.42 and then 1.67 on groundedness. Both the drafting model and the judge vary from
+run to run, and 12 scored claims is a small sample. Compare several runs with a
+spread (`evals/analyze_runs.py`), claim by claim, and treat a gap smaller than about
+twice its standard error as unproven. What the research says and what I measured —
+including how noisy the judge is — is in [`docs/EVAL_NOISE.md`](docs/EVAL_NOISE.md).
+
 These numbers cover the **intake** draft. The three later drafts (follow-up chase,
 coverage recommendation, closure notice — Phases 2–3) are not in the harness yet;
 they follow the same rules and are verified to work, but aren't measured. See the
@@ -242,10 +250,12 @@ customer_support_agent/     backend package
   core/settings.py          configuration
 app.py                      Streamlit dashboard
 main.py                     API entrypoint
-evals/                      test set, metrics, judge, runner
+evals/                      test set, metrics, judge, runner, run-comparison and
+                            judge-stability scripts
 tests/                      unit tests (pytest)
 docs/                       ITERATION_LOG, DESIGN_GAPS, HOW_TO_TEST, architecture,
-                            WALKTHROUGH (one claim, stage by stage)
+                            WALKTHROUGH (one claim, stage by stage),
+                            EVAL_NOISE (why scores move between runs)
 knowledge_base/             the 5 policy / procedure documents
 ```
 
@@ -269,6 +279,11 @@ This is a portfolio prototype, not production. The main gaps — full breakdown 
 theme, with why each matters and a rough cost, in
 [`docs/DESIGN_GAPS.md`](docs/DESIGN_GAPS.md):
 
+- **The benefit is not measured.** How much adjuster time or cost this saves has
+  not been measured; the speed and consistency benefits above are what the design is
+  meant to enable. Nor has it been tried on real claims or with real adjusters.
+- **The evaluation is small and noisy.** 14 claims (12 scored), and scores vary
+  between runs even on identical code — see [`docs/EVAL_NOISE.md`](docs/EVAL_NOISE.md).
 - **Only the intake draft is in the evaluation harness** — the three later drafts
   are built to the same rules and verified to work, but not yet measured.
 - **No authentication or audit trail** — anyone who can reach the API can act on

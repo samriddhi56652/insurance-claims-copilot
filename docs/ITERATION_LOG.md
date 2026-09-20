@@ -19,6 +19,11 @@ The project arrived as a half-finished template that wouldn't even start.
   adjuster records the decision (approve / deny) and the settlement steps, a
   closure notice goes to the claimant, and the customer-history memory is written
   from the real outcome.
+- **Phase 4** — re-ran the evaluation and found the scores move between runs even
+  on identical code. Fixed one real retrieval gap (recall 0.85 → 1.0), tried
+  several prompt changes that did not clearly help, and measured how much of the
+  noise comes from the drafting model, the judge, and the small test set — so
+  before/after claims now need several runs and a spread.
 
 ---
 
@@ -650,3 +655,107 @@ architecture, the evaluation, and the gaps — none of them just walk one claim.
 
 **Impact:** documentation only, no code changed. Linked from the README ("See it
 on one claim") and listed in the project layout.
+
+---
+
+# Phase 4 — One retrieval fix, and learning how noisy the scores are
+
+I re-ran the evaluation to check that the Phase 2-3 work hadn't hurt draft
+quality. The first run scored groundedness **1.42**, well under the recorded
+**1.71**. A second run of the same code scored **1.67**. That gap is what this
+phase is about.
+
+### 4.1 — The search now spreads across the policy documents
+**What:** the knowledge-base search used to take the four closest chunks overall.
+It now pulls the 16 closest, then fills the four slots taking the best chunk from
+each *different* document first, and only then lets any document have a second
+slot (`customer_support_agent/integrations/rag/chroma_kb.py`).
+
+**Why:** five test claims kept scoring below 1.0 on *retrieval recall* — the share
+of the policy documents a claim needs that the search actually found. The saved
+run shows the cause directly. Before the fix, `multi-coverage-01` got two chunks
+from the required-documents file and two from the coverage guidelines, and none
+from the intake checklist it also needed. `comp-theft-01`, `bodily-injury-01`,
+`fraud-01` and `shared-fault-01` followed the same pattern: chunks came in pairs
+from two or three files, and the pairs crowded out the one needed file. (My first
+guess had been that all four came from a single file. The data showed that was
+wrong: it was two or three files, in pairs.)
+
+**Impact:**
+- Retrieval recall went from **0.847 to 1.0** and stayed there in all five runs
+  since. Unlike the AI's scores, this number does not wobble, because the search
+  involves no model sampling.
+- Groundedness averaged **1.54 before (2 runs) and 1.72 after (3 runs)**. That gap
+  is +0.18 against a standard error of 0.13, so it is not conclusive. Compared
+  claim by claim, 7 claims improved, 1 got worse, 4 were unchanged; the largest
+  gains were on claims whose retrieval had been incomplete. See
+  [`EVAL_NOISE.md`](EVAL_NOISE.md) §2.
+- **A cost I have not measured:** the model now sees more of the documents on
+  almost every claim, including some it does not need (for example the
+  fraud-indicators file on a theft claim). With only five documents that may be
+  harmless, but nobody has checked whether the extra text adds noise.
+
+A small companion fix in `requirements_catalog.py`: claim types are matched
+ignoring case, plus a few aliases, because the test set spells them differently
+from the dashboard's dropdown (`liability_property_damage` vs `Property Damage`).
+Nothing depends on it today; it stops the checklist lookup silently falling back
+to "Other" for those spellings.
+
+### 4.2 — Things I tried that did not clearly help
+All of these were reverted; the runs are not kept in the repo, so this is a
+record of what was tried, not of evidence.
+- **A stricter prompt rule** ("only name a coverage type the facts support; only
+  cite documents that appear in the retrieved text"): one run went up to 1.83, the
+  next fell back to 1.67.
+- **A second rule** so a light scratch on the insured's own car is not treated as
+  a separate Collision claim: fixed that claim's coverage but a different claim
+  stopped naming a coverage at all.
+- **Giving the prompt the exact required-documents list** for the claim type: no
+  improvement, and it did not stop the claim it was aimed at from asking for
+  documents not on the list.
+- **Temperature 0:** scores still varied between two runs, and one claim stopped
+  naming its coverage.
+
+The lesson from these is in 4.3: with this much run-to-run movement, several of
+those apparent "fixes" and "regressions" were probably noise.
+
+### 4.3 — Why the scores move, and what to do about it
+**What:** I looked into why identical code gives different scores, read the
+research (summarised, with quotes and links, in [`EVAL_NOISE.md`](EVAL_NOISE.md)),
+and measured the pieces on this project.
+
+**What I found:**
+- **The drafting model is not repeatable even at temperature 0.** Atil et al.
+  (2024) tested five models "configured to be deterministic" and found that
+  "none of the LLMs consistently delivers repeatable accuracy across all tasks,
+  much less identical output strings."
+- **The judge is noisy too.** Haldar & Hockenmaier (2025): "LLM judges have low
+  intra-rater reliability in their assigned scores across different runs."
+- **In this project:** re-scoring 12 saved drafts five times each, the judge's
+  groundedness score changed on **3 of 12** drafts. Across three runs of the same
+  code, the judge alone is about **28%** of the run-to-run variance (a floor —
+  the re-scores ran back to back) and the changing drafts at most about 72%.
+  In those runs 7 of 12 claims got a different score at least once.
+- **Speed:** the median draft request took 2.6–3.3 seconds across 12 runs.
+
+**What changed as a result:**
+- Two new scripts: `evals/analyze_runs.py` (mean and spread over several runs, and
+  a claim-by-claim before/after) and `evals/judge_stability.py` (re-score saved
+  drafts to isolate the judge).
+- The result files behind the numbers above are kept in `evals/results/`
+  (see the README there).
+- From here, a before/after comparison should be several runs each, with a spread,
+  and claim by claim.
+
+**What I got wrong along the way:** I first put the swings down to the server's
+request batching without checking that it applied to this provider; I read single
+claims flipping as the effect of whichever prompt change I had just made; and I
+guessed the retrieval bug was "all four chunks from one file" before opening the
+saved run. Each is corrected above.
+
+**What is still not done:** the judge test used one run's drafts; the before/after
+groups are two and three runs; the test set is 14 claims. More claims, especially
+borderline ones, is the real fix, and I have not done it. And **how much adjuster
+time the copilot saves has not been measured at all** — the speed and consistency
+benefits in the README are what the design is meant to enable, not measured
+results.
