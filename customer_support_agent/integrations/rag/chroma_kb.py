@@ -97,10 +97,17 @@ class KnowledgeBaseService:
     def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         if self._collection.count() == 0:
             return []
-        
+
+        k = top_k or self._settings.rag_top_k
+        # Pull a wider candidate pool than we return. A plain top-k similarity
+        # search has no notion of source diversity, so when a claim genuinely
+        # needs facts from 2-3 different policy documents, the closest k chunks
+        # can all land in the single most-similar file and starve the rest out
+        # (observed on multi-coverage / bodily-injury / theft claims in evals).
+        candidate_k = min(k * 4, self._collection.count())
         results = self._collection.query(
             query_texts=[query],
-            n_results=top_k or self._settings.rag_top_k,
+            n_results=candidate_k,
             include=["documents", "metadatas", "distances"],
         )
 
@@ -108,11 +115,11 @@ class KnowledgeBaseService:
         metadatas = (results.get("metadatas") or [[]])[0]
         distances = (results.get("distances") or [[]])[0]
 
-        combined: list[dict[str, Any]] = []
+        candidates: list[dict[str, Any]] = []
         for i, document in enumerate(documents):
             metadata = metadatas[i] if i < len(metadatas) else {}
             distance = distances[i] if i < len(distances) else None
-            combined.append(
+            candidates.append(
                 {
                     "content": document,
                     "source": metadata.get("source", "unknown"),
@@ -120,4 +127,30 @@ class KnowledgeBaseService:
                 }
             )
 
-        return combined
+        return self._diversify_by_source(candidates, k)
+
+    @staticmethod
+    def _diversify_by_source(
+        candidates: list[dict[str, Any]], k: int
+    ) -> list[dict[str, Any]]:
+        """Greedily fill `k` slots favouring one hit per distinct source first,
+        in similarity order, before letting any source take a second slot -
+        so a claim needing two policy documents actually gets both."""
+        selected_idx: list[int] = []
+        seen_sources: set[str] = set()
+
+        for i, hit in enumerate(candidates):
+            if len(selected_idx) >= k:
+                break
+            if hit["source"] not in seen_sources:
+                selected_idx.append(i)
+                seen_sources.add(hit["source"])
+
+        for i, _hit in enumerate(candidates):
+            if len(selected_idx) >= k:
+                break
+            if i not in selected_idx:
+                selected_idx.append(i)
+
+        selected_idx.sort()
+        return [candidates[i] for i in selected_idx]

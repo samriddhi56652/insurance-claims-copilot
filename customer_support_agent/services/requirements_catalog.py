@@ -68,6 +68,24 @@ _BY_TYPE: dict[str, tuple[tuple[str, str], ...]] = {
 }
 
 
+# Other spellings of a known claim type seen outside the dashboard's own
+# dropdown (e.g. the eval dataset's ad hoc snake_case claim_type strings) -
+# mapped to the canonical _BY_TYPE key, case-insensitively.
+_ALIASES: dict[str, str] = {
+    "comprehensive_theft": "Comprehensive",
+    "comprehensive_peril": "Comprehensive",
+    "liability_property_damage": "Property Damage",
+    "liability": "Property Damage",
+    "bodily_injury": "Bodily Injury",
+    "glass": "Glass Damage",
+}
+
+_CANONICAL_BY_LOWER: dict[str, str] = {
+    **{key.lower(): key for key in _BY_TYPE},
+    **_ALIASES,
+}
+
+
 def _dedupe(items: list[tuple[str, str]]) -> list[tuple[str, str]]:
     seen: set[str] = set()
     out: list[tuple[str, str]] = []
@@ -86,8 +104,9 @@ def requirements_for_claim(claim_type: str | None) -> list[tuple[str, str]]:
     Unknown / missing type falls back to the always-needed facts plus a generic
     photos + estimate pair.
     """
-    key = (claim_type or "").strip()
-    type_items = _BY_TYPE.get(key, _BY_TYPE["Other"])
+    key = (claim_type or "").strip().lower()
+    canonical = _CANONICAL_BY_LOWER.get(key)
+    type_items = _BY_TYPE.get(canonical, _BY_TYPE["Other"]) if canonical else _BY_TYPE["Other"]
     return _dedupe([*_ALWAYS, *type_items])
 
 
