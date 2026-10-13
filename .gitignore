@@ -36,3 +36,7 @@ evals/results/*
 !evals/results/raw-20260911-155544.jsonl
 !evals/results/raw-20260915-230008.jsonl
 !evals/results/judge-stability-20260915-230008.json
+
+# Analytics: the generated SQLite file is rebuilt by analytics/seed_synthetic_claims.py;
+# the CSV exports are kept so a BI tool can load them straight from the repo.
+analytics/analytics.db

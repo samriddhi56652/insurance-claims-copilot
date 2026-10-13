@@ -1,0 +1,5 @@
+stage_reached,claims,mean_hours_since_previous,median_hours_since_previous
+intake_sent,369,3.2,2.5
+docs_complete,350,147.0,109.7
+recommended,349,7.0,5.8
+closed,344,76.0,60.7

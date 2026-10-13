@@ -1,0 +1,20 @@
+claim_type,priority,decided_claims,approved,approval_pct
+Bodily Injury,high,6,4,66.7
+Bodily Injury,urgent,12,12,100.0
+Collision,high,23,22,95.7
+Collision,low,28,22,78.6
+Collision,medium,65,49,75.4
+Collision,urgent,8,5,62.5
+Comprehensive,high,10,7,70.0
+Comprehensive,low,8,6,75.0
+Comprehensive,medium,33,27,81.8
+Glass Damage,high,13,13,100.0
+Glass Damage,low,12,12,100.0
+Glass Damage,medium,25,23,92.0
+Other,low,5,5,100.0
+Other,medium,9,5,55.6
+Property Damage,high,6,5,83.3
+Property Damage,low,7,6,85.7
+Property Damage,medium,35,27,77.1
+Theft,high,6,5,83.3
+Theft,medium,14,11,78.6

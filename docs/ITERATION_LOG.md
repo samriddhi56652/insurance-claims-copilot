@@ -24,6 +24,10 @@ The project arrived as a half-finished template that wouldn't even start.
   several prompt changes that did not clearly help, and measured how much of the
   noise comes from the drafting model, the judge, and the small test set — so
   before/after claims now need several runs and a spread.
+- **Phase 5** — built a claims-analytics layer on a synthetic claims history:
+  eight pipeline questions in SQL (CTEs, window functions), cross-checked in
+  pandas, exported as CSVs for a BI tool. The data is invented, so the numbers
+  validate the method, not the business.
 
 ---
 
@@ -759,3 +763,49 @@ borderline ones, is the real fix, and I have not done it. And **how much adjuste
 time the copilot saves has not been measured at all** — the speed and consistency
 benefits in the README are what the design is meant to enable, not measured
 results.
+
+---
+
+# Phase 5 — A claims-analytics layer (SQL, pandas, BI exports)
+
+The copilot produces drafts; this phase asks the other question a claims manager
+would: *how is the pipeline performing?* It lives in [`analytics/`](../analytics/).
+
+### 5.1 — Synthetic claims history
+**What:** the real database holds a handful of demo claims, too few to analyse, so
+`analytics/seed_synthetic_claims.py` writes about 370 invented claims across a
+year into a separate SQLite file, using the app's own tables and `init_db`.
+**Why separate:** the real data is never touched, and the generator is repeatable
+(seed 42).
+**Planted on purpose:** a March 2026 surge (15% extra claims, handled 1.6x slower),
+5% of claimants who go silent, and per-type duration and approval differences — so
+the queries can be checked against an answer I know.
+
+### 5.2 — Eight questions in SQL
+**What:** cycle time (mean / median / p90) by claim type, slowest stage, funnel,
+approval rate, repeat claims within 90 days, cohort retention, weekly backlog, and
+unusually slow claims — in `analytics/sql/` using CTEs, a recursive CTE, `LAG`,
+`LEAD`, `FIRST_VALUE`, `ROW_NUMBER`, `PERCENT_RANK` and `AVG() OVER`.
+**A limit I had to work around:** the app has no stage-history table, so each stage
+time is a proxy derived from existing rows (documented in `analytics/README.md`).
+**Care taken:** the funnel and repeat-claim queries count only claims old enough to
+have had time to progress (60 / 90 days); counting recent claims would read "not
+yet" as "dropped out".
+
+### 5.3 — A second implementation to check the first
+**What:** `analytics/pandas_check.py` re-derives six of the eight in pandas; a test
+confirms the check can fail when a result is corrupted.
+**Found:** one apparent mismatch (13/16 = 81.25%: SQLite rounds to 81.3, Python to
+81.2). Not a bug; the comparison now uses the unrounded value.
+**Also fixed:** my first version created a persistent view, which would have written
+into the real database when pointed at it. It is now a `TEMP` view, and a run
+against the real database is verified to leave nothing behind.
+
+### 5.4 — CSV exports for a BI tool
+**What:** `analytics/exports/` holds one CSV per question, with a load recipe for
+Power BI or Metabase in `analytics/README.md`.
+
+**Impact:** 8 new tests (all passing); SQL and pandas agree on Q1-Q5 and Q7.
+**What this is not:** every number is a property of how I wrote the generator, not
+a finding about real claims. Q6 and Q8 have no second implementation. The dashboard
+itself is not part of this change.

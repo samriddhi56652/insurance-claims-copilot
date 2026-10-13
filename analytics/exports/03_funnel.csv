@@ -1,0 +1,6 @@
+stage,claims,pct_of_registered,pct_of_previous_stage,dropped_at_this_step
+registered,312,100.0,,
+intake_sent,312,100.0,100.0,0
+docs_complete,295,94.6,94.6,17
+recommended,295,94.6,100.0,0
+closed,295,94.6,100.0,0

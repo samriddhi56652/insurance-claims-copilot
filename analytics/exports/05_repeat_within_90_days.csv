@@ -1,0 +1,8 @@
+claim_type,claims_observed,followed_within_90d,repeat_within_90d_pct
+Comprehensive,41,9,22.0
+Glass Damage,43,9,20.9
+Collision,100,18,18.0
+Bodily Injury,20,2,10.0
+Property Damage,40,3,7.5
+Theft,19,0,0.0
+Other,16,0,0.0

@@ -1,0 +1,8 @@
+claim_type,claims,mean_days,median_days,p90_days
+Bodily Injury,20,23.38,21.12,34.44
+Theft,25,19.39,18.42,31.32
+Other,17,10.33,10.8,14.27
+Property Damage,52,10.93,9.95,17.63
+Comprehensive,54,8.48,7.82,11.76
+Collision,124,7.76,7.13,11.66
+Glass Damage,52,4.24,3.88,6.34

@@ -254,6 +254,8 @@ app.py                      Streamlit dashboard
 main.py                     API entrypoint
 evals/                      test set, metrics, judge, runner, run-comparison and
                             judge-stability scripts
+analytics/                  claims-analytics layer: synthetic data, 8 SQL queries,
+                            pandas cross-check, CSV exports (see analytics/README.md)
 tests/                      unit tests (pytest)
 docs/                       ITERATION_LOG, DESIGN_GAPS, HOW_TO_TEST, architecture,
                             WALKTHROUGH (one claim, stage by stage),
@@ -284,6 +286,9 @@ theme, with why each matters and a rough cost, in
 - **The benefit is not measured.** How much adjuster time or cost this saves has
   not been measured; the speed and consistency benefits above are what the design is
   meant to enable. Nor has it been tried on real claims or with real adjusters.
+- **The analytics run on invented data.** `analytics/` shows the SQL and the
+  method on a synthetic claims history; its numbers are properties of the
+  generator, not findings about real claims.
 - **The evaluation is small and noisy.** 14 claims (12 scored), and scores vary
   between runs even on identical code — see [`docs/EVAL_NOISE.md`](docs/EVAL_NOISE.md).
 - **Only the intake draft is in the evaluation harness** — the three later drafts
