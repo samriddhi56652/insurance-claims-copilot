@@ -105,7 +105,7 @@ recommendation that lands on Liability, and the human-only settlement screen.
 |---|---|
 | **Evaluation harness, not vibes** | A labelled test set, rule-based checks + an LLM-as-judge (a *larger* model than the generator), and a documented series of iterations with measured deltas. Groundedness moved **1.11 → 1.71 / 2** across the fixes. Scores also move between runs on identical code, so before/after comparisons use several runs with a spread ([`docs/EVAL_NOISE.md`](docs/EVAL_NOISE.md)). |
 | **RAG done deliberately** | Curated single-domain corpus; a document needed on *every* draft is injected as fixed context rather than left to similarity search; retrieval quality is measured, not assumed — and when the measurement showed the search missing a needed document on 5 claims, the fix took recall from 0.85 to 1.0. |
-| **Agent → direct calls** | Started with an LLM agent choosing tools. Measured that the tools apply to *every* claim and the model never really chose — replaced the agent with a single generation call. **~4× fewer tokens, ~5× faster, same grounding.** |
+| **Agent → direct calls** | Started with an LLM agent choosing tools. Measured that the tools apply to *every* claim and the model never really chose — replaced the agent with a single generation call. **3–4 model calls per draft became 1; roughly 3× fewer tokens and ~5× lower latency (single measurements, free-tier API); no visible loss in groundedness.** |
 | **Deterministic guardrail** | The eval proved a prompt rule can't stop the model guessing on vague input. A hard pre-check now blocks under-described claims (and prompt-injection attempts) before they reach the model. |
 | **Honest about its gaps** | [`docs/DESIGN_GAPS.md`](docs/DESIGN_GAPS.md) — the gap between this prototype and production, by theme (measurement, governance, scale, capability vs. commercial platforms), each with why it matters and a rough cost. |
 
@@ -144,7 +144,7 @@ python -m streamlit run app.py                     # dashboard  :8501  (second t
 ```mermaid
 flowchart TD
     UI["Browser: Streamlit dashboard (app.py)"]
-    API["FastAPI: 18 routes"]
+    API["FastAPI: 19 routes"]
     SVC["Services: DraftService, KnowledgeService, SupportCopilot, WorkflowService"]
     REPO["Repositories: raw SQL"]
     DB[("SQLite: support.db")]
@@ -220,6 +220,8 @@ Headline movement over the iteration series:
 
 \* the dip is mostly over-strict answer labels; see the log. Test manual:
 [`docs/HOW_TO_TEST.md`](docs/HOW_TO_TEST.md).
+
+Like-for-like, on the 7 claims judged in both runs, groundedness went from 1.29 to 1.71. The 1.11 baseline averaged 9 claims, two of which were later refused by the gate or failed with a rate-limit error; both are single runs.
 
 **Reading the numbers.** A single run is not a reliable figure: the same code scored
 1.42 and then 1.67 on groundedness. Both the drafting model and the judge vary from

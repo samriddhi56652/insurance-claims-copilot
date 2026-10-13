@@ -253,10 +253,12 @@ flowchart TD
 
 > **Why no agent?** The earlier design used a LangChain agent that *chose* which
 > tools to call — 3–4 LLM calls per draft. But all three signal checks apply to
-> *every* claim and the model never really chose; it called them all every time.
-> Computing them in plain code and putting the results in the prompt is **~4×
-> fewer tokens, ~5× faster, same grounding** — and it fits a free-tier rate limit
-> that the agentic version did not.
+> *every* claim and the model never really chose: in the last agent run it called
+> the same two of the three on all 7 judged claims. Computing them in plain code
+> and putting the results in the prompt took a draft from 3–4 calls to 1 —
+> roughly 3× fewer tokens (~12,000 → ~4,000) and ~5× lower latency (30–40 s →
+> ~6 s), with no visible loss in groundedness — and it fits a free-tier rate
+> limit that the agentic version did not. Single measurements, not a controlled test.
 
 > **Degradation is designed in.** No Gemini key → Chroma uses a local embedding
 > model and langmem falls back to recency. Memory init fails → it's logged into
