@@ -68,8 +68,8 @@ def run_one(api: str, claim: dict) -> dict:
     tk.raise_for_status()
     ticket_id = tk.json()["id"]
 
-    # The app has no backoff on Groq 429s (it surfaces them as a 500 - see
-    # docs/DESIGN_GAPS.md). Retry here so a rate limit doesn't abort the run.
+    # The Groq client already retries 429s; if they are still exhausted the API
+    # returns an error. Retry here so a rate limit doesn't abort the whole run.
     g0 = time.perf_counter()
     for attempt in range(4):
         gd = requests.post(f"{api}/api/tickets/{ticket_id}/generate-draft", timeout=180)
@@ -240,8 +240,8 @@ def main() -> None:
     print(f"Running {len(claims)} claim(s) against {args.api} "
           f"(judge {'off' if args.no_judge else 'on'})")
 
-    # Groq free tier is ~8k tokens/min; one agentic draft is well over that, so
-    # pace non-gated claims. Override with EVAL_CLAIM_PACING_S.
+    # Groq's free tier is rate-limited, so pace non-gated claims. Override the
+    # delay (seconds) with EVAL_CLAIM_PACING_S.
     pacing = float(os.environ.get("EVAL_CLAIM_PACING_S", "75"))
 
     raw, scored = [], []

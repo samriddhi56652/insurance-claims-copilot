@@ -8,8 +8,9 @@ Design choices (called out because naive judging is a red flag):
   * Structured rubric with explicit level definitions, reason-before-score.
   * Temperature 0 for stability.
 
-Validate this judge against your own hand labels before trusting the numbers
-(see notebooks/02_evaluation.ipynb).
+Validate this judge against hand labels before trusting the numbers. Only its
+self-consistency has been measured so far (evals/judge_stability.py); agreement
+with a human reader has not.
 """
 
 from __future__ import annotations
