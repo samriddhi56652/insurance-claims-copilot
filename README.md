@@ -239,6 +239,29 @@ note at the end of [`docs/ITERATION_LOG.md`](docs/ITERATION_LOG.md).
 
 ---
 
+## Claims analytics
+
+The copilot produces claims; [`analytics/`](analytics/) asks how that pipeline is
+performing. Eight business questions are answered in SQL — cycle time by claim type
+(mean, median, 90th percentile), the slowest stage, funnel drop-off, approval rate,
+repeat claims within 90 days, cohort retention, weekly backlog and unusually slow
+claims — using CTEs, a recursive CTE and window functions.
+
+- **Cross-checked.** Six of the eight are re-derived independently in pandas and
+  compared; the tests fail if they disagree.
+- **Validated against a known answer.** The generator plants a surge month and a
+  group of stalled claimants, and the queries have to recover them.
+- **BI-ready.** Each question is exported as a CSV in
+  [`analytics/exports/`](analytics/exports/), with a load recipe for Power BI in the
+  [analytics README](analytics/README.md).
+
+**The data is synthetic.** The real database holds a few demo claims, so about 370
+invented ones are generated into a separate file. Every number is a property of how
+the generator was written, not a finding about real claims; what is real is the
+method, and the SQL runs unchanged on the app's own database.
+
+---
+
 ## Project layout
 
 ```
