@@ -172,6 +172,8 @@ flowchart TD
 
 ### The claim lifecycle — FNOL to closure
 
+![The claim lifecycle: what the copilot does and what the adjuster decides at each of the five stages](docs/figures/fig2_claim_workflow_readme.png)
+
 ```mermaid
 stateDiagram-v2
     [*] --> intake: claim registered
