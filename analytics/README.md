@@ -23,6 +23,41 @@ python -m pytest tests/test_analytics.py      # 8 tests on a small generated dat
 database. It writes nothing into it (the helper view is a `TEMP` view that
 disappears when the connection closes).
 
+The scripts need `numpy` and `pandas`, which are not in `requirements.txt`:
+`pip install numpy pandas`.
+
+### Run one query at a time
+
+The query files read from the temporary view built by `sql/00_views.sql`, so a
+query file cannot run on its own. This command builds the view, then runs one file
+and prints the result as a table. Run it from the project root; it works in cmd,
+PowerShell, bash and zsh. Change only the file name at the end (use
+`.venv\Scripts\python.exe` instead of `python` if the virtual environment is not
+active):
+
+```bash
+python -c "import sqlite3,sys,pandas as pd; c=sqlite3.connect('analytics/analytics.db'); c.executescript(open('analytics/sql/00_views.sql').read()); pd.set_option('display.width',250); pd.set_option('display.max_columns',20); pd.set_option('display.max_rows',200); print(pd.read_sql(open(sys.argv[1]).read(), c))" analytics/sql/03_funnel.sql
+```
+
+| File name to put at the end | What it prints |
+|---|---|
+| `analytics/sql/01_cycle_time_by_type.sql` | mean, median and 90th percentile days, by claim type |
+| `analytics/sql/02_stage_durations.sql` | hours spent between stages |
+| `analytics/sql/03_funnel.sql` | claims reaching each stage, and where they drop out |
+| `analytics/sql/04_approval_rate.sql` | approval rate by claim type and priority |
+| `analytics/sql/05_repeat_within_90_days.sql` | repeat claims within 90 days, by claim type |
+| `analytics/sql/06_cohort_retention.sql` | repeat-claim table by first-claim month (46 rows) |
+| `analytics/sql/07_weekly_backlog.sql` | weekly registered, closed and open claims (53 rows) |
+| `analytics/sql/08_slow_claims.sql` | the slowest 5% of claims in each type |
+
+`NaN` in the output means "empty" (for example the first funnel stage has no
+previous stage to compare with). To see the view itself, `00_views.sql` has no
+output of its own, so print it:
+
+```bash
+python -c "import sqlite3, pandas as pd; c=sqlite3.connect('analytics/analytics.db'); c.executescript(open('analytics/sql/00_views.sql').read()); pd.set_option('display.width',250); pd.set_option('display.max_columns',20); print(pd.read_sql('SELECT * FROM v_claim_events LIMIT 6', c))"
+```
+
 ## The data model, and one honest limit
 
 The app stores each claim as a ticket plus its checklist, its correspondence and

@@ -805,6 +805,17 @@ against the real database is verified to leave nothing behind.
 **What:** `analytics/exports/` holds one CSV per question, with a load recipe for
 Power BI or Metabase in `analytics/README.md`.
 
+### 5.5 — A command to run one query file
+**What:** `analytics/README.md` now has one command that builds the temporary view
+and runs any single query file, printing the result as a table, plus a list of
+the eight files and what each prints.
+**Why:** the query files read from a temporary view, so they can't be run on their
+own, and running all eight at once makes it hard to study one. While writing it I
+also noticed that `numpy` and `pandas`, which the analytics scripts need, are not
+in `requirements.txt`; the README now says to install them.
+**Impact:** documentation only, no code changed. The command was tested in Windows
+cmd on all eight files.
+
 **Impact:** 8 new tests (all passing); SQL and pandas agree on Q1-Q5 and Q7.
 **What this is not:** every number is a property of how I wrote the generator, not
 a finding about real claims. Q6 and Q8 have no second implementation. The dashboard
